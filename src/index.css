@@ -1,0 +1,113 @@
+/* Base styles */
+:root {
+  --main-bg-color: #0f0f12;
+  --main-text-color: #eaeaea;
+  --primary-color: #63c6d4;
+  --accent-color: #e0a639;
+  --dark-brown: #2c2318;
+  --light-brown: #5a4a33;
+  --parchment: #f2e8c0;
+  --leather: #8b5a2b;
+  --wood: #614126;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: 'Roboto', sans-serif;
+  width: 100%;
+  height: 100%;
+  background-color: var(--main-bg-color);
+  color: var(--main-text-color);
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* For the game map background, we'll use images */
+.world-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('/background.jpg');
+  background-size: cover;
+  background-position: center;
+  z-index: -1;
+}
+
+/* NPC styling */
+.npc {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.npc:hover {
+  transform: scale(1.1);
+}
+
+.npc-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid var(--accent-color);
+  background-color: var(--dark-brown);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.npc-name {
+  margin-top: 5px;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+/* Task card styling */
+.task-card {
+  background-color: var(--parchment);
+  color: var(--dark-brown);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dark-brown);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--light-brown);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--leather);
+}
