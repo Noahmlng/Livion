@@ -15,9 +15,9 @@ const GlobalStyle = createGlobalStyle`
   html, body {
     height: 100%;
     width: 100%;
-    font-family: ${({ theme }) => theme.fonts.body};
-    background-color: ${({ theme }) => theme.colors.background};
-    color: ${({ theme }) => theme.colors.foreground};
+    font-family: 'Roboto', sans-serif;
+    background-color: #0f0f12;
+    color: #eaeaea;
     font-size: 16px;
     line-height: 1.5;
     overflow-x: hidden;

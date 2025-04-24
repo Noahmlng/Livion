@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FiHome, FiStar, FiCalendar, FiTrophy, FiSettings } from 'react-icons/fi';
+import { FiHome, FiStar, FiCalendar, FiAward, FiSettings } from 'react-icons/fi';
 import clsx from 'clsx';
 
 type AppShellProps = {
@@ -9,7 +9,7 @@ type AppShellProps = {
 
 const navigationItems = [
   { name: 'Today', href: '/', icon: FiHome },
-  { name: 'Challenges', href: '/challenges', icon: FiTrophy },
+  { name: 'Challenges', href: '/challenges', icon: FiAward },
   { name: 'Daily Tasks', href: '/daily', icon: FiCalendar },
   { name: 'Main Quests', href: '/main', icon: FiStar },
   { name: 'Settings', href: '/settings', icon: FiSettings },

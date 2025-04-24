@@ -23,17 +23,14 @@ const NPC = styled(motion.div)<{ x: number; y: number }>`
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    border: 3px solid ${({ theme }) => theme.colors.gold};
-    background-color: ${({ theme }) => theme.colors.dark};
-    background-image: url('/npc.png');
-    background-size: cover;
-    background-position: center;
+    border: 3px solid gold;
+    background-color: #333;
     box-shadow: 0 0 15px rgba(224, 166, 57, 0.5);
   }
   
   .npc-name {
     background-color: rgba(0, 0, 0, 0.7);
-    color: ${({ theme }) => theme.colors.gold};
+    color: gold;
     padding: 3px 8px;
     border-radius: 10px;
     font-size: 0.8rem;
@@ -57,12 +54,12 @@ const QuestIndicator = styled.div`
   transform: translateX(-50%);
   width: 20px;
   height: 20px;
-  background-color: ${({ theme }) => theme.colors.gold};
+  background-color: gold;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.colors.dark};
+  color: #333;
   font-weight: bold;
   font-size: 14px;
   animation: pulse 1.5s infinite;
@@ -97,6 +94,17 @@ const Dialog = styled(motion.div)`
   z-index: 100;
 `;
 
+// Background container
+const BackgroundContainer = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #1a1a2e;
+  z-index: 0;
+`;
+
 // Defining our NPCs
 const npcs = [
   { id: 1, name: '长老', x: 25, y: 40, questAvailable: true },
@@ -122,6 +130,16 @@ const GameWorld: React.FC = () => {
 
   return (
     <WorldContainer>
+      <BackgroundContainer>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="bg-white p-8 rounded-lg shadow-lg text-center">
+            <h1 className="text-3xl font-bold mb-4">Welcome to Livion</h1>
+            <p className="text-lg mb-4">Your gamified productivity app!</p>
+            <p className="text-sm text-gray-600">Click on any NPC to see your tasks</p>
+          </div>
+        </div>
+      </BackgroundContainer>
+      
       {/* The NPCs in the world */}
       {npcs.map(npc => (
         <NPC 
@@ -153,7 +171,7 @@ const GameWorld: React.FC = () => {
           >
             <motion.div
               onClick={(e) => e.stopPropagation()}
-              style={{ width: '90%', maxWidth: '1000px', height: '80vh' }}
+              style={{ width: '90%', maxWidth: '1000px', height: '80vh', background: '#333', borderRadius: '8px' }}
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
