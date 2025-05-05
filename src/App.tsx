@@ -1,33 +1,49 @@
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from './components/layout/ThemeProvider';
-import { TaskProvider } from './context/TaskContext';
-import AppShell from './components/AppShell';
-import GameWorld from './components/layout/GameWorld';
-import SimpleTest from './components/SimpleTest';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import TodayView from './components/tabs/TodayView';
+import TasksView from './components/tabs/TasksView';
+import AppHeader from './components/layout/AppHeader';
+import { ValhallaTaskProvider } from './context/ValhallaTaskContext';
+import './App.css';
 
-// Simple page components
-const ChallengesPage = () => <div className="p-6 bg-blue-500 text-white rounded-lg">Challenges Page</div>;
-const DailyPage = () => <div className="p-6 bg-green-500 text-white rounded-lg">Daily Tasks Page</div>;
-const MainPage = () => <div className="p-6 bg-yellow-500 text-white rounded-lg">Main Quests Page</div>;
-const SettingsPage = () => <div className="p-6 bg-purple-500 text-white rounded-lg">Settings Page</div>;
+const TABS = [
+  { id: 'today', label: '今天', icon: '📅', component: TodayView },
+  { id: 'tasks', label: '支线任务', icon: '⚔️', component: TasksView },
+];
 
-const App: React.FC = () => {
+function App() {
+  const [activeTab, setActiveTab] = useState('today');
+  
+  const ActiveComponent = TABS.find(tab => tab.id === activeTab)?.component || TodayView;
+  
   return (
-    <ThemeProvider>
-      <TaskProvider>
-        <AppShell>
-          <Routes>
-            <Route path="/" element={<GameWorld />} />
-            <Route path="/challenges" element={<ChallengesPage />} />
-            <Route path="/daily" element={<DailyPage />} />
-            <Route path="/main" element={<MainPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </AppShell>
-      </TaskProvider>
-    </ThemeProvider>
+    <ValhallaTaskProvider>
+      <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col">
+        <div className="container mx-auto px-4 py-6 flex-shrink-0">
+          <AppHeader 
+            tabs={TABS} 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab} 
+          />
+          
+          <main className="mt-6 flex-1 overflow-auto" style={{ maxHeight: 'calc(100vh - 100px)' }}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="pb-12 h-full"
+              >
+                <ActiveComponent />
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
+      </div>
+    </ValhallaTaskProvider>
   );
-};
+}
 
 export default App;
