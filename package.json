@@ -22,6 +22,7 @@
     "drizzle-kit": "^0.31.1",
     "drizzle-orm": "^0.43.1",
     "framer-motion": "^12.5.0",
+    "idb": "^8.0.2",
     "react": "^19.0.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-cropper-pro": "^1.0.7",

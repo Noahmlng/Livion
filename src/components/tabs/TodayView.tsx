@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useValhallaTaskContext } from '../../context/ValhallaTaskContext';
+import { useDb } from '../../context/DbContext';
 import { 
   DragDropContext, 
   Droppable, 
@@ -53,6 +54,13 @@ interface Note {
 
 const TodayView = () => {
   const { categories } = useValhallaTaskContext();
+  const { 
+    scheduleEntries, 
+    loadScheduleEntries, 
+    createScheduleEntry, 
+    updateScheduleEntry, 
+    deleteScheduleEntry 
+  } = useDb();
   
   // 状态
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
@@ -80,17 +88,36 @@ const TodayView = () => {
     resetServerContext();
     setForceUpdateKey(prev => prev + 1);
     
-    // Add a listener to help debug drag events
-    document.addEventListener('mousedown', () => {
-      console.log('Mouse down event detected');
-    });
-    
     // 生成示例历史数据
     generateMockTaskHistory();
     
     // 生成示例笔记
     generateMockNotes();
+    
+    // 加载今天的任务安排
+    loadTodayScheduleEntries();
   }, []);
+  
+  // 从数据库加载今天的任务安排
+  const loadTodayScheduleEntries = async () => {
+    const today = new Date();
+    await loadScheduleEntries(today);
+  };
+  
+  // 当数据库中的调度条目更改时更新本地状态
+  useEffect(() => {
+    if (scheduleEntries.length > 0) {
+      const mappedTasks = scheduleEntries.map(entry => ({
+        id: entry.id,
+        title: entry.title,
+        timeSlot: entry.timeSlot as TimeSlot,
+        sourceType: entry.sourceType as 'challenge' | 'template' | 'custom',
+        sourceId: entry.sourceId,
+        completed: entry.completed
+      }));
+      setScheduledTasks(mappedTasks);
+    }
+  }, [scheduleEntries]);
   
   // 监听历史容器的滚动事件，实现无限加载
   useEffect(() => {
@@ -234,8 +261,20 @@ const TodayView = () => {
   };
   
   // 切换完成状态
-  const toggleComplete = (taskId: string) => {
-    setScheduledTasks(prev => prev.map(task => task.id === taskId ? { ...task, completed: !task.completed } : task));
+  const toggleComplete = async (taskId: string) => {
+    // 更新本地状态
+    const taskToUpdate = scheduledTasks.find(task => task.id === taskId);
+    if (!taskToUpdate) return;
+    
+    const newCompletedState = !taskToUpdate.completed;
+    
+    // 更新本地状态
+    setScheduledTasks(prev => 
+      prev.map(task => task.id === taskId ? { ...task, completed: newCompletedState } : task)
+    );
+    
+    // 更新数据库
+    await updateScheduleEntry(taskId, { is_completed: newCompletedState });
   };
   
   // 获取支线任务和日常任务
@@ -253,15 +292,26 @@ const TodayView = () => {
   };
 
   // 保存编辑的任务
-  const saveEditedTask = () => {
+  const saveEditedTask = async () => {
     if (editingTaskId) {
+      const newTitle = editingText.trim();
+      if (!newTitle) {
+        cancelEditing();
+        return;
+      }
+      
+      // 更新本地状态
       setScheduledTasks(prev => 
         prev.map(task => 
           task.id === editingTaskId 
-            ? { ...task, title: editingText.trim() || task.title } 
+            ? { ...task, title: newTitle } 
             : task
         )
       );
+      
+      // 更新数据库
+      await updateScheduleEntry(editingTaskId, { title: newTitle });
+      
       setEditingTaskId(null);
       setEditingText('');
     }
@@ -283,23 +333,39 @@ const TodayView = () => {
   };
   
   // 处理新任务创建
-  const handleCreateTask = (timeSlot: TimeSlot) => {
+  const handleCreateTask = async (timeSlot: TimeSlot) => {
     if (!newTaskText[timeSlot].trim()) return;
     
-    const newTask: ScheduledTask = {
-      id: `custom-${Date.now()}`,
-      title: newTaskText[timeSlot],
-      timeSlot: timeSlot,
-      sourceType: 'custom',
-      completed: false,
-    };
+    // 创建新任务对象
+    const title = newTaskText[timeSlot].trim();
     
-    setScheduledTasks([...scheduledTasks, newTask]);
+    // 创建数据库条目
+    const today = new Date();
+    const result = await createScheduleEntry({
+      title,
+      time_slot: timeSlot,
+      scheduled_date: today,
+      source_type: 'custom'
+    });
+    
+    // 清空输入框
     setNewTaskText({ ...newTaskText, [timeSlot]: '' });
+    
+    // 重新加载今天的任务
+    await loadTodayScheduleEntries();
+  };
+  
+  // 删除任务
+  const handleDeleteTask = async (taskId: string) => {
+    // 从本地状态中删除
+    setScheduledTasks(scheduledTasks.filter(t => t.id !== taskId));
+    
+    // 从数据库中删除
+    await deleteScheduleEntry(taskId);
   };
   
   // 处理任务拖拽结束
-  const handleDragEnd = (result: any) => {
+  const handleDragEnd = async (result: any) => {
     const { source, destination } = result;
     
     console.log('Drag result:', result);
@@ -329,18 +395,22 @@ const TodayView = () => {
       // 找到对应原始任务
       const originalTask = sourceList.find(t => t.id === taskId) || taskToAdd;
       
-      const newScheduledTask: ScheduledTask = {
-        id: `scheduled-${Date.now()}`,
+      // 创建数据库条目
+      const today = new Date();
+      const taskSourceType = source.droppableId === 'challenges' ? 'challenge' : 'template';
+      const newEntryData = {
         title: originalTask.title,
-        timeSlot: destination.droppableId as TimeSlot,
-        sourceType: source.droppableId === 'challenges' ? 'challenge' : 'template',
-        sourceId: originalTask.id,
-        reward: originalTask.reward_points,
-        completed: false,
+        time_slot: destination.droppableId,
+        scheduled_date: today,
+        source_type: taskSourceType,
+        task_id: taskSourceType === 'challenge' ? originalTask.id : undefined,
+        template_id: taskSourceType === 'template' ? originalTask.id : undefined
       };
       
-      console.log('Created scheduled task:', newScheduledTask);
-      setScheduledTasks([...scheduledTasks, newScheduledTask]);
+      await createScheduleEntry(newEntryData);
+      
+      // 重新加载今天的任务
+      await loadTodayScheduleEntries();
       return;
     }
     
@@ -349,28 +419,27 @@ const TodayView = () => {
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
       console.log('Moving between time slots');
       
-      const updatedTasks = [...scheduledTasks];
-      
       // 找出要移动的任务
-      const tasksInSourceSlot = updatedTasks.filter(task => task.timeSlot === source.droppableId);
+      const tasksInSourceSlot = scheduledTasks.filter(task => task.timeSlot === source.droppableId);
       const taskToMove = tasksInSourceSlot[source.index];
       console.log('Task to move:', taskToMove);
       
-      // 从源列表中移除
-      const newTasks = updatedTasks.filter(task => task.id !== taskToMove.id);
-      
-      // 更新任务的时间段
-      taskToMove.timeSlot = destination.droppableId as TimeSlot;
-      
-      // 插入到目标位置
-      newTasks.splice(
-        newTasks.filter(task => task.timeSlot === destination.droppableId).length, 
-        0, 
-        taskToMove
-      );
-      
-      console.log('Updated task list:', newTasks);
-      setScheduledTasks(newTasks);
+      // 如果时间段发生了变化，更新数据库
+      if (source.droppableId !== destination.droppableId) {
+        // 更新本地状态
+        setScheduledTasks(prev => 
+          prev.map(task => 
+            task.id === taskToMove.id 
+              ? { ...task, timeSlot: destination.droppableId as TimeSlot } 
+              : task
+          )
+        );
+        
+        // 更新数据库
+        await updateScheduleEntry(taskToMove.id, {
+          time_slot: destination.droppableId
+        });
+      }
     }
   };
   
@@ -438,7 +507,7 @@ const TodayView = () => {
                           {!editingTaskId && (
                             <button 
                               className="ml-2 text-red-600 hover:text-red-400"
-                              onClick={() => setScheduledTasks(scheduledTasks.filter(t => t.id !== task.id))}
+                              onClick={() => handleDeleteTask(task.id)}
                             >
                               ✕
                             </button>

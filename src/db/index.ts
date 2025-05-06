@@ -1,54 +1,64 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import Database from 'better-sqlite3';
-import { join } from 'path';
-import * as schema from './schema';
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
-// Determine if we're in production (Vercel) or development
-const isProd = process.env.NODE_ENV === 'production';
-
-// For development: use local SQLite database
-let db: ReturnType<typeof setupDb>;
-
-function setupDb() {
-  // In production on Vercel, we'll use Vercel Postgres instead (configured separately)
-  if (isProd) {
-    // This is a placeholder - Vercel deployment will use Vercel Postgres
-    return { schema };
-  }
-
-  // Local SQLite database for development
-  const sqlite = new Database(join(process.cwd(), 'livion.db'));
-  
-  // Enable foreign keys
-  sqlite.exec('PRAGMA foreign_keys = ON');
-  
-  const databaseInstance = drizzle(sqlite, { schema });
-
-  // Run migrations in development
-  try {
-    // Create migrations directory if it doesn't exist
-    const fs = require('fs');
-    const migrationsDir = join(process.cwd(), 'migrations');
-    if (!fs.existsSync(migrationsDir)) {
-      fs.mkdirSync(migrationsDir, { recursive: true });
-    }
-    
-    migrate(databaseInstance, { migrationsFolder: migrationsDir });
-    console.log('Migrations applied successfully');
-  } catch (error) {
-    console.error('Error applying migrations:', error);
-  }
-
-  return databaseInstance;
+// Define the database schema
+interface LiveDBSchema extends DBSchema {
+  schedule_entries: {
+    key: string;
+    value: {
+      id: string;
+      user_id: string;
+      task_id?: string;
+      template_id?: string;
+      title: string;
+      time_slot: string;
+      scheduled_date: Date;
+      completed_at?: Date;
+      is_completed: boolean;
+      source_type: string;
+      created_at: Date;
+    };
+    indexes: { 'by-user': string; 'by-date': Date };
+  };
+  notes: {
+    key: string;
+    value: {
+      id: string;
+      user_id: string;
+      content: string;
+      created_at: Date;
+      updated_at: Date;
+    };
+    indexes: { 'by-user': string };
+  };
 }
 
-// Initialize the database
-export function getDb() {
-  if (!db) {
-    db = setupDb();
+// Database version
+const DB_VERSION = 1;
+
+// Database instance
+let dbPromise: Promise<IDBPDatabase<LiveDBSchema>> | null = null;
+
+// Get or initialize the database
+export async function getDB() {
+  if (!dbPromise) {
+    dbPromise = openDB<LiveDBSchema>('livion-db', DB_VERSION, {
+      upgrade(db) {
+        // Create tables if they don't exist
+        if (!db.objectStoreNames.contains('schedule_entries')) {
+          const scheduleStore = db.createObjectStore('schedule_entries', { keyPath: 'id' });
+          scheduleStore.createIndex('by-user', 'user_id');
+          scheduleStore.createIndex('by-date', 'scheduled_date');
+        }
+        
+        if (!db.objectStoreNames.contains('notes')) {
+          const notesStore = db.createObjectStore('notes', { keyPath: 'id' });
+          notesStore.createIndex('by-user', 'user_id');
+        }
+      },
+    });
   }
-  return db;
+  
+  return dbPromise;
 }
 
 // Helper for generating unique IDs
