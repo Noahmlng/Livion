@@ -1,5 +1,6 @@
 import supabase from './supabase';
 import { User } from '../types/supabase';
+import { supabaseApi } from './supabaseApi';
 
 // Debug logging
 const DEBUG = true;
@@ -14,28 +15,21 @@ const log = (...args: any[]) => {
  */
 export const signIn = async (password: string): Promise<User> => {
   log('Signing in with password:', password);
+  console.log('Querying database with password:', password);
   
-  // Query the users table
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('password', password)
-    .single();
-
-  if (error) {
+  try {
+    // 使用统一的 API 接口
+    const user = await supabaseApi.users.getByPassword(password);
+    
+    // 存储用户 ID 到 session storage
+    sessionStorage.setItem('user_id', user.id.toString());
+    
+    log('Signed in successfully:', user);
+    return user;
+  } catch (error) {
     log('Error signing in:', error);
     throw error;
   }
-
-  if (!data) {
-    throw new Error('User not found');
-  }
-
-  // Store the user ID in session storage
-  sessionStorage.setItem('user_id', data.id);
-  
-  log('Signed in successfully:', data);
-  return data;
 };
 
 /**
@@ -59,19 +53,15 @@ export const getCurrentUser = async (): Promise<User | null> => {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-    .single();
-
-  if (error) {
+  try {
+    // 使用统一的 API 接口
+    const user = await supabaseApi.users.getById(userId);
+    log('Current user:', user);
+    return user;
+  } catch (error) {
     log('Error getting current user:', error);
     return null;
   }
-
-  log('Current user:', data);
-  return data;
 };
 
 /**
@@ -116,11 +106,9 @@ export const signInWithKey = async (loginKey: string) => {
     // Create a simulated user for NOVAE
     const customUser: User = {
       id: 'novae-special-user',
-      email: 'novae@noemail.example.com',
-      app_metadata: {},
-      user_metadata: {},
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
+      name: 'NOVAE',
+      password: 'NOVA-E',
+      created_at: new Date().toISOString()
     };
     
     // Attempt to sign in with Supabase auth to create a proper session

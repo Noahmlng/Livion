@@ -1,76 +1,197 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
 import { signIn } from '../../utils/auth';
 import { useAuth } from '../../context/AuthContext';
 
-export default function Login() {
-  const [password, setPassword] = useState('');
+interface LoginProps {
+  onLogin?: () => void;
+}
+
+export default function Login({ onLogin }: LoginProps) {
+  const [password, setPassword] = useState(['', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const { refreshAuthState } = useAuth();
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null, null]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleInputChange = (index: number, value: string) => {
+    // Only allow one character per input and convert to uppercase
+    if (value.length > 1) {
+      value = value.charAt(value.length - 1);
+    }
+    value = value.toUpperCase();
+
+    console.log(`Input change at index ${index}, value: "${value}"`);
+    
+    const newPassword = [...password];
+    newPassword[index] = value;
+    console.log("New password array:", newPassword);
+    setPassword(newPassword);
+
+    // Move to next input if current one is filled
+    if (value && index < 4 && inputRefs.current[index + 1]) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto submit when all fields are filled, but use the updated newPassword array
+    // instead of waiting for the state update to complete
+    if (index === 4 && value && newPassword.every(char => char)) {
+      console.log("All fields filled, submitting with:", newPassword);
+      handleSubmitWithPassword(newPassword);
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Handle backspace - move to previous input
+    if (e.key === 'Backspace' && !password[index] && index > 0) {
+      const newPassword = [...password];
+      newPassword[index - 1] = '';
+      setPassword(newPassword);
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // New function that takes the password directly instead of using state
+  const handleSubmitWithPassword = async (passwordArray: string[]) => {
+    // Format password as XXXX-X (dash is automatically added)
+    const firstPart = passwordArray.slice(0, 4).join('');
+    const lastPart = passwordArray[4]; 
+    
+    console.log('Raw password array (direct):', passwordArray);
+    console.log('Index 4 value (direct):', passwordArray[4]);
+    console.log('First part length:', firstPart.length);
+    console.log('Last part defined:', lastPart ? 'yes' : 'no');
+    
+    // Ensure we use the last character if it exists
+    const formattedPassword = `${firstPart}-${lastPart}`;
+    
+    console.log('formattedPassword (direct): ', formattedPassword);
+    
     setError('');
     setLoading(true);
 
     try {
-      await signIn(password);
+      await signIn(formattedPassword);
       await refreshAuthState();
-      navigate('/');
+      
+      if (onLogin) {
+        onLogin();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      setError(err instanceof Error ? err.message : '登录失败，请检查密码');
+      // Clear the inputs on error
+      setPassword(['', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Keep the original handleSubmit for the manual button
+  const handleSubmit = async () => {
+    // Format password as XXXX-X (dash is automatically added)
+    const firstPart = password.slice(0, 4).join('');
+    const lastPart = password[4]; 
+    
+    console.log('Raw password array:', password);
+    console.log('Index 4 value:', password[4]);
+    console.log('First part length:', firstPart.length);
+    console.log('Last part defined:', lastPart ? 'yes' : 'no');
+    
+    // Ensure we use the last character if it exists
+    const formattedPassword = lastPart 
+      ? `${firstPart}-${lastPart}` 
+      : `${firstPart}-`;
+    
+    console.log('password: ', password);
+    console.log('firstPart: ', firstPart);
+    console.log('lastPart: ', lastPart);
+    console.log('formattedPassword: ', formattedPassword);
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      await signIn(formattedPassword);
+      await refreshAuthState();
+      
+      if (onLogin) {
+        onLogin();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败，请检查密码');
+      // Clear the inputs on error
+      setPassword(['', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your password
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
-          )}
-
-          <div>
-            <button
-              type="submit"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-bg-dark border border-border-metal rounded-lg p-6 w-96 shadow-lg">
+        <h2 className="text-xl font-semibold text-text-primary text-center mb-6">
+          输入密码
+        </h2>
+        
+        <div className="flex items-center justify-center space-x-2 mb-8">
+          {/* First 4 characters */}
+          {[0, 1, 2, 3].map((index) => (
+            <input
+              key={index}
+              ref={el => { inputRefs.current[index] = el }}
+              type="text"
+              maxLength={1}
+              className="w-12 h-12 text-center text-xl bg-bg-panel border border-border-metal rounded-md focus:outline-none focus:ring-2 focus:ring-accent text-text-primary"
+              value={password[index]}
+              onChange={(e) => handleInputChange(index, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(index, e)}
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </div>
-        </form>
+              autoFocus={index === 0}
+            />
+          ))}
+          
+          {/* Dash separator (non-input) */}
+          <div className="w-6 text-center text-xl text-text-primary">-</div>
+          
+          {/* Last character */}
+          <input
+            ref={el => { 
+              inputRefs.current[4] = el;
+              console.log("Last input ref set:", el ? "element" : "null");
+            }}
+            type="text"
+            maxLength={1}
+            className="w-12 h-12 text-center text-xl bg-bg-panel border border-border-metal rounded-md focus:outline-none focus:ring-2 focus:ring-accent text-text-primary"
+            value={password[4]}
+            onChange={(e) => {
+              console.log("Last input changed:", e.target.value);
+              handleInputChange(4, e.target.value);
+            }}
+            onKeyDown={(e) => handleKeyDown(4, e)}
+            disabled={loading}
+          />
+        </div>
+
+        {error && (
+          <div className="text-red-500 text-sm text-center mb-4">{error}</div>
+        )}
+
+        <div className="text-xs text-gray-400 text-center">
+          {loading ? '验证中...' : '输入完成后将自动验证'}
+        </div>
+
+        {/* Add a manual submit button for testing */}
+        <div className="mt-4">
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+          >
+            手动提交
+          </button>
+        </div>
       </div>
     </div>
   );
-} 
+}
