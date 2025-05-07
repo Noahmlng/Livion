@@ -1,56 +1,58 @@
 import supabase from './supabase';
 
-// Task Categories
-export interface Category {
-  id: string;
-  name: string;
-  description?: string;
-  created_at?: string;
-  user_id?: string;
-}
-
 // Tasks
 export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  category_id: string;
-  difficulty: number;
-  reward_points: number;
-  completed: boolean;
+  task_id: number;
+  user_id: number;
+  goal_id?: number;
+  name: string;
+  description: string;
   created_at?: string;
-  updated_at?: string;
-  user_id?: string;
-  imageUrl?: string;
+  priority: number;
+  status: 'ongoing' | 'completed' | 'deleted';
+  reward_points: number;
+  image_path?: string;
 }
 
 // Schedule Entries
 export interface ScheduleEntry {
-  id: string;
-  title: string;
-  timeSlot: string;
-  scheduled_date: Date | string;
-  source_type: 'challenge' | 'template' | 'custom';
-  task_id?: string;
-  template_id?: string;
-  completed: boolean;
+  entry_id: number;
+  user_id: number;
+  date: Date | string;
+  slot: string;
+  status: 'ongoing' | 'completed' | 'deleted';
+  task_type: string;
+  ref_task_id?: number;
+  ref_template_id?: number;
+  custom_name?: string;
+  custom_desc?: string;
+  reward_points: number;
   created_at?: string;
-  user_id?: string;
 }
 
 // Notes
 export interface Note {
-  id: string;
+  note_id: number;
+  user_id: number;
+  goal_id?: number;
   content: string;
-  createdAt: Date;
-  user_id?: string;
+  created_at?: string;
 }
 
-// Category CRUD Operations
-export const categoryService = {
-  async getAll(userId: string): Promise<Category[]> {
+// Goal interface
+export interface Goal {
+  goal_id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  created_at?: string;
+}
+
+// Goals CRUD Operations
+export const goalService = {
+  async getAll(userId: string): Promise<Goal[]> {
     const { data, error } = await supabase
-      .from('categories')
+      .from('goals')
       .select('*')
       .eq('user_id', userId);
       
@@ -58,10 +60,10 @@ export const categoryService = {
     return data || [];
   },
   
-  async create(category: Omit<Category, 'id' | 'created_at'>, userId: string): Promise<Category> {
+  async create(goal: Omit<Goal, 'goal_id' | 'created_at'>, userId: string): Promise<Goal> {
     const { data, error } = await supabase
-      .from('categories')
-      .insert({ ...category, user_id: userId })
+      .from('goals')
+      .insert({ ...goal, user_id: userId })
       .select()
       .single();
       
@@ -69,11 +71,11 @@ export const categoryService = {
     return data;
   },
   
-  async update(id: string, updates: Partial<Category>, userId: string): Promise<void> {
+  async update(id: string, updates: Partial<Goal>, userId: string): Promise<void> {
     const { error } = await supabase
-      .from('categories')
+      .from('goals')
       .update(updates)
-      .eq('id', id)
+      .eq('goal_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -81,9 +83,9 @@ export const categoryService = {
   
   async delete(id: string, userId: string): Promise<void> {
     const { error } = await supabase
-      .from('categories')
+      .from('goals')
       .delete()
-      .eq('id', id)
+      .eq('goal_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -102,18 +104,18 @@ export const taskService = {
     return data || [];
   },
   
-  async getByCategory(categoryId: string, userId: string): Promise<Task[]> {
+  async getByGoal(goalId: string, userId: string): Promise<Task[]> {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('category_id', categoryId)
+      .eq('goal_id', goalId)
       .eq('user_id', userId);
       
     if (error) throw error;
     return data || [];
   },
   
-  async create(task: Omit<Task, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<Task> {
+  async create(task: Omit<Task, 'task_id' | 'created_at'>, userId: string): Promise<Task> {
     const { data, error } = await supabase
       .from('tasks')
       .insert({ ...task, user_id: userId })
@@ -127,8 +129,8 @@ export const taskService = {
   async update(id: string, updates: Partial<Task>, userId: string): Promise<void> {
     const { error } = await supabase
       .from('tasks')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
+      .update(updates)
+      .eq('task_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -138,7 +140,7 @@ export const taskService = {
     const { error } = await supabase
       .from('tasks')
       .delete()
-      .eq('id', id)
+      .eq('task_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -148,8 +150,8 @@ export const taskService = {
     // First get the current state
     const { data, error: fetchError } = await supabase
       .from('tasks')
-      .select('completed')
-      .eq('id', id)
+      .select('status')
+      .eq('task_id', id)
       .eq('user_id', userId)
       .single();
       
@@ -159,10 +161,9 @@ export const taskService = {
     const { error: updateError } = await supabase
       .from('tasks')
       .update({ 
-        completed: !data.completed,
-        updated_at: new Date().toISOString()
+        status: data.status === 'ongoing' ? 'completed' : 'ongoing'
       })
-      .eq('id', id)
+      .eq('task_id', id)
       .eq('user_id', userId);
       
     if (updateError) throw updateError;
@@ -186,20 +187,19 @@ export const scheduleService = {
       .from('schedule_entries')
       .select('*')
       .eq('user_id', userId)
-      .eq('scheduled_date', dateStr);
+      .eq('date', dateStr);
       
     if (error) throw error;
     return data || [];
   },
   
-  async create(entry: Omit<ScheduleEntry, 'id' | 'created_at' | 'completed'>, userId: string): Promise<ScheduleEntry> {
+  async create(entry: Omit<ScheduleEntry, 'entry_id' | 'created_at'>, userId: string): Promise<ScheduleEntry> {
     const { data, error } = await supabase
       .from('schedule_entries')
       .insert({ 
         ...entry,
         user_id: userId,
-        completed: false,
-        scheduled_date: formatDateForDB(entry.scheduled_date)
+        date: formatDateForDB(entry.date)
       })
       .select()
       .single();
@@ -213,14 +213,14 @@ export const scheduleService = {
   async update(id: string, updates: Partial<ScheduleEntry>, userId: string): Promise<void> {
     // Format date if it's being updated
     const formattedUpdates = { ...updates };
-    if (updates.scheduled_date) {
-      formattedUpdates.scheduled_date = formatDateForDB(updates.scheduled_date);
+    if (updates.date) {
+      formattedUpdates.date = formatDateForDB(updates.date);
     }
     
     const { error } = await supabase
       .from('schedule_entries')
       .update(formattedUpdates)
-      .eq('id', id)
+      .eq('entry_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -230,7 +230,7 @@ export const scheduleService = {
     const { error } = await supabase
       .from('schedule_entries')
       .delete()
-      .eq('id', id)
+      .eq('entry_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -244,13 +244,13 @@ export const noteService = {
       .from('notes')
       .select('*')
       .eq('user_id', userId)
-      .order('createdAt', { ascending: false });
+      .order('created_at', { ascending: false });
       
     if (error) throw error;
     return data || [];
   },
   
-  async create(note: Omit<Note, 'id'>, userId: string): Promise<Note> {
+  async create(note: Omit<Note, 'note_id' | 'created_at'>, userId: string): Promise<Note> {
     const { data, error } = await supabase
       .from('notes')
       .insert({ ...note, user_id: userId })
@@ -265,7 +265,7 @@ export const noteService = {
     const { error } = await supabase
       .from('notes')
       .update({ content })
-      .eq('id', id)
+      .eq('note_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;
@@ -275,7 +275,61 @@ export const noteService = {
     const { error } = await supabase
       .from('notes')
       .delete()
-      .eq('id', id)
+      .eq('note_id', id)
+      .eq('user_id', userId);
+      
+    if (error) throw error;
+  }
+};
+
+// TaskTemplate interface
+export interface TaskTemplate {
+  template_id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  default_points: number;
+  created_at?: string;
+}
+
+// TaskTemplate CRUD Operations
+export const templateService = {
+  async getAll(userId: string): Promise<TaskTemplate[]> {
+    const { data, error } = await supabase
+      .from('task_templates')
+      .select('*')
+      .eq('user_id', userId);
+      
+    if (error) throw error;
+    return data || [];
+  },
+  
+  async create(template: Omit<TaskTemplate, 'template_id' | 'created_at'>, userId: string): Promise<TaskTemplate> {
+    const { data, error } = await supabase
+      .from('task_templates')
+      .insert({ ...template, user_id: userId })
+      .select()
+      .single();
+      
+    if (error) throw error;
+    return data;
+  },
+  
+  async update(id: string, updates: Partial<TaskTemplate>, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('task_templates')
+      .update(updates)
+      .eq('template_id', id)
+      .eq('user_id', userId);
+      
+    if (error) throw error;
+  },
+  
+  async delete(id: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('task_templates')
+      .delete()
+      .eq('template_id', id)
       .eq('user_id', userId);
       
     if (error) throw error;

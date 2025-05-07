@@ -1,23 +1,24 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ScheduleEntry as SupabaseScheduleEntry, Task as SupabaseTask, Note as SupabaseNote } from '../types/supabase';
 import { ScheduleEntry, Task, Note } from '../utils/database';
-import { taskService, scheduleService, noteService } from '../utils/database';
+import { taskService, scheduleService, noteService, goalService } from '../utils/database';
 import { supabaseApi } from '../utils/supabaseApi';
-import { convertSupabaseEntries, convertUpdateFields, localToSupabaseEntry } from '../utils/scheduleAdapter';
+import { convertSupabaseEntries, convertUpdateFields, localToSupabaseEntry, supabaseToLocalEntry } from '../utils/scheduleAdapter';
 import { useAuth } from './AuthContext';
 
 interface DbContextType {
   userId: string | null;
   // Tasks
   tasks: Task[];
-  loadTasks: (category?: string) => Promise<void>;
-  createTask: (data: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => Promise<Task | null>;
+  loadTasks: (goalId?: string) => Promise<void>;
+  createTask: (data: Omit<Task, 'task_id' | 'created_at' | 'user_id'>) => Promise<Task | null>;
   updateTask: (taskId: string, data: Partial<Task>) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   // Schedule entries
   scheduleEntries: ScheduleEntry[];
   loadScheduleEntries: (date?: Date) => Promise<void>;
-  createScheduleEntry: (data: Omit<ScheduleEntry, 'id' | 'created_at' | 'completed' | 'user_id'>) => Promise<ScheduleEntry | null>;
+  loadScheduleEntriesRange: (startDate: Date, endDate: Date) => Promise<Record<string, ScheduleEntry[]>>;
+  createScheduleEntry: (data: any) => Promise<ScheduleEntry | null>;
   updateScheduleEntry: (entryId: string, data: Partial<ScheduleEntry>) => Promise<boolean>;
   deleteScheduleEntry: (entryId: string) => Promise<boolean>;
   // Notes
@@ -34,7 +35,7 @@ const DbContext = createContext<DbContextType | undefined>(undefined);
 
 export function DbProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const userId = user?.id || null;
+  const userId = user?.user_id ? user.user_id.toString() : null;
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
@@ -60,14 +61,14 @@ export function DbProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   // Task functions
-  const loadTasks = async (category?: string) => {
+  const loadTasks = async (goalId?: string) => {
     if (!userId) return;
     
     setLoading(true);
     try {
       let result: Task[];
-      if (category) {
-        result = await taskService.getByCategory(category, userId);
+      if (goalId) {
+        result = await taskService.getByGoal(goalId, userId);
       } else {
         result = await taskService.getAll(userId);
       }
@@ -79,12 +80,18 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createTask = async (data: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => {
+  const createTask = async (data: Omit<Task, 'task_id' | 'created_at' | 'user_id'>) => {
     if (!userId) return null;
     
     setLoading(true);
     try {
-      const result = await taskService.create(data, userId);
+      // 添加用户ID
+      const taskWithUserId = {
+        ...data,
+        user_id: parseInt(userId)
+      };
+      
+      const result = await taskService.create(taskWithUserId, userId);
       await loadTasks();
       return result;
     } catch (error) {
@@ -163,7 +170,74 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createScheduleEntry = async (data: Omit<ScheduleEntry, 'id' | 'created_at' | 'completed' | 'user_id'>) => {
+  // 新增方法: 加载日期范围内的日程安排（用于历史记录）
+  const loadScheduleEntriesRange = async (startDate: Date, endDate: Date): Promise<Record<string, ScheduleEntry[]>> => {
+    if (!userId) return {};
+    
+    setLoading(true);
+    try {
+      // 创建一个对象，按日期存储条目
+      const entriesByDate: Record<string, ScheduleEntry[]> = {};
+      
+      // 首先尝试使用 supabaseApi
+      try {
+        console.log(`Trying supabaseApi for schedules range from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+        // 将 userId 转换为数字
+        const userIdNum = parseInt(userId);
+        if (isNaN(userIdNum)) {
+          throw new Error('Invalid user ID');
+        }
+        
+        // 使用 Supabase API 获取日期范围内的数据
+        const supabaseEntries = await supabaseApi.schedules.getByDateRange(startDate, endDate, userIdNum);
+        console.log('Supabase schedule entries for date range:', supabaseEntries);
+        
+        // 转换为本地格式并按日期分组
+        const convertedEntries = convertSupabaseEntries(supabaseEntries);
+        
+        // 按日期分组
+        convertedEntries.forEach(entry => {
+          const dateStr = typeof entry.date === 'string' 
+            ? entry.date 
+            : (entry.date instanceof Date 
+                ? entry.date.toISOString().split('T')[0] 
+                : new Date().toISOString().split('T')[0]);
+          
+          if (!entriesByDate[dateStr]) {
+            entriesByDate[dateStr] = [];
+          }
+          entriesByDate[dateStr].push(entry);
+        });
+        
+        return entriesByDate; // 如果 Supabase 成功，直接返回
+      } catch (supabaseError) {
+        console.warn('Supabase API failed for date range, falling back to local DB:', supabaseError);
+      }
+      
+      // 回退到本地数据库 - 逐日获取
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const formattedDate = currentDate.toISOString().split('T')[0];
+        const result = await scheduleService.getByDate(currentDate, userId);
+        
+        if (result.length > 0) {
+          entriesByDate[formattedDate] = result;
+        }
+        
+        // 移动到下一天
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      return entriesByDate;
+    } catch (error) {
+      console.error('Error loading schedule entries range:', error);
+      return {};
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createScheduleEntry = async (data: any) => {
     if (!userId) return null;
     
     setLoading(true);
@@ -177,17 +251,35 @@ export function DbProvider({ children }: { children: ReactNode }) {
           throw new Error('Invalid user ID');
         }
         
+        // 将UI格式的数据转换为数据库格式
+        // UI格式: { title, timeSlot, scheduled_date, source_type }
+        // DB格式: { custom_name, slot, date, task_type }
+        const dbFormatEntry: Omit<ScheduleEntry, 'entry_id' | 'created_at' | 'user_id'> = {
+          custom_name: data.title,
+          slot: data.timeSlot,
+          date: data.scheduled_date,
+          task_type: data.source_type,
+          status: 'ongoing',
+          ref_task_id: data.task_id ? parseInt(data.task_id) : undefined,
+          ref_template_id: data.template_id ? parseInt(data.template_id) : undefined,
+          custom_desc: '',
+          reward_points: 0,
+          user_id: userIdNum
+        };
+        
         // 准备数据并转换为 Supabase 格式
         const localEntry: ScheduleEntry = {
-          id: '0', // 临时 ID
-          title: data.title,
-          timeSlot: data.timeSlot,
-          scheduled_date: data.scheduled_date,
-          source_type: data.source_type,
-          task_id: data.task_id,
-          template_id: data.template_id,
-          completed: false,
-          user_id: userId
+          entry_id: 0, // 临时 ID
+          user_id: userIdNum,
+          date: dbFormatEntry.date,
+          slot: dbFormatEntry.slot,
+          status: dbFormatEntry.status,
+          task_type: dbFormatEntry.task_type,
+          ref_task_id: dbFormatEntry.ref_task_id,
+          ref_template_id: dbFormatEntry.ref_template_id,
+          custom_name: dbFormatEntry.custom_name,
+          custom_desc: dbFormatEntry.custom_desc,
+          reward_points: dbFormatEntry.reward_points
         };
         
         const supabaseEntry = localToSupabaseEntry(localEntry);
@@ -196,13 +288,13 @@ export function DbProvider({ children }: { children: ReactNode }) {
         const result = await supabaseApi.schedules.create(supabaseEntry);
         console.log('Supabase entry created:', result);
         
-        // 转换回本地格式
+        // 转换回UI格式
         const convertedResult = {
           id: result.entry_id.toString(),
           title: result.custom_name || '',
           timeSlot: result.slot,
           scheduled_date: result.date,
-          source_type: result.task_type as any,
+          source_type: result.task_type,
           task_id: result.ref_task_id?.toString(),
           template_id: result.ref_template_id?.toString(),
           completed: result.status === 'completed',
@@ -213,7 +305,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         await loadScheduleEntries(
           typeof data.scheduled_date === 'string' 
             ? new Date(data.scheduled_date) 
-            : data.scheduled_date as Date
+            : data.scheduled_date
         );
         
         return convertedResult;
@@ -221,8 +313,19 @@ export function DbProvider({ children }: { children: ReactNode }) {
         console.warn('Supabase API create failed, falling back to local DB:', supabaseError);
       }
       
-      // 回退到本地数据库
-      const result = await scheduleService.create(data, userId);
+      // 回退到本地数据库 - 转换为本地数据库格式
+      const dbFormatEntry = {
+        date: data.scheduled_date,
+        slot: data.timeSlot,
+        task_type: data.source_type,
+        status: 'ongoing',
+        custom_name: data.title,
+        custom_desc: '',
+        reward_points: 0,
+        user_id: parseInt(userId)
+      };
+      
+      const result = await scheduleService.create(dbFormatEntry, userId);
       await loadScheduleEntries();
       return result;
     } catch (error) {
@@ -315,7 +418,18 @@ export function DbProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const result = await noteService.getAll(userId);
-      setNotes(result);
+      // 确保处理created_at和createdAt的差异
+      const processedNotes = result.map(note => {
+        // 如果note中有created_at但没有createdAt，则添加createdAt
+        if (note.created_at && !note.createdAt) {
+          return {
+            ...note,
+            createdAt: new Date(note.created_at)
+          };
+        }
+        return note;
+      });
+      setNotes(processedNotes);
     } catch (error) {
       console.error('Error loading notes:', error);
     } finally {
@@ -330,7 +444,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     try {
       const newNote = {
         content,
-        createdAt: new Date()
+        user_id: parseInt(userId)
       };
       const result = await noteService.create(newNote, userId);
       await loadNotes();
@@ -386,6 +500,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         deleteTask,
         scheduleEntries,
         loadScheduleEntries,
+        loadScheduleEntriesRange,
         createScheduleEntry,
         updateScheduleEntry,
         deleteScheduleEntry,

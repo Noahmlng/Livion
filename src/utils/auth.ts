@@ -22,7 +22,7 @@ export const signIn = async (password: string): Promise<User> => {
     const user = await supabaseApi.users.getByPassword(password);
     
     // 存储用户 ID 到 session storage
-    sessionStorage.setItem('user_id', user.id.toString());
+    sessionStorage.setItem('user_id', user.user_id.toString());
     
     log('Signed in successfully:', user);
     return user;
@@ -105,9 +105,9 @@ export const signInWithKey = async (loginKey: string) => {
     log('Special case: NOVAE login');
     // Create a simulated user for NOVAE
     const customUser: User = {
-      id: 'novae-special-user',
-      name: 'NOVAE',
+      user_id: 1,
       password: 'NOVA-E',
+      total_points: 0,
       created_at: new Date().toISOString()
     };
     

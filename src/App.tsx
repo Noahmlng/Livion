@@ -8,6 +8,7 @@ import { DbProvider } from './context/DbContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/auth/Login';
 import './App.css';
+import './components/tabs/hideScrollbar.css';
 
 const TABS = [
   { id: 'today', label: '今天', icon: '📅', component: TodayView },
@@ -77,7 +78,7 @@ function MainApp() {
       {!showLogin && (
         <DbProvider>
           <ValhallaTaskProvider>
-            <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col">
+            <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col hide-scrollbar">
               <div className="container mx-auto px-4 py-6 flex-shrink-0">
                 <div className="relative mb-4">
                   <div className="flex justify-center">
@@ -87,19 +88,9 @@ function MainApp() {
                       onTabChange={setActiveTab} 
                     />
                   </div>
-                  
-                  <button 
-                    onClick={() => {
-                      signOutUser();
-                      setShowLogin(true);
-                    }}
-                    className="absolute right-0 top-0 px-4 py-2 bg-bg-panel border border-border-metal text-text-primary rounded-md hover:bg-sidebar-item-hover-bg"
-                  >
-                    登出
-                  </button>
                 </div>
                 
-                <main className="mt-6 flex-1 overflow-auto" style={{ maxHeight: 'calc(100vh - 100px)' }}>
+                <main className="mt-6 flex-1 overflow-auto hide-scrollbar" style={{ maxHeight: 'calc(100vh - 100px)' }}>
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={activeTab}

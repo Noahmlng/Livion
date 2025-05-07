@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { signIn } from '../../utils/auth';
 import { useAuth } from '../../context/AuthContext';
 
@@ -19,12 +19,9 @@ export default function Login({ onLogin }: LoginProps) {
       value = value.charAt(value.length - 1);
     }
     value = value.toUpperCase();
-
-    console.log(`Input change at index ${index}, value: "${value}"`);
     
     const newPassword = [...password];
     newPassword[index] = value;
-    console.log("New password array:", newPassword);
     setPassword(newPassword);
 
     // Move to next input if current one is filled
@@ -56,16 +53,9 @@ export default function Login({ onLogin }: LoginProps) {
     const firstPart = passwordArray.slice(0, 4).join('');
     const lastPart = passwordArray[4]; 
     
-    console.log('Raw password array (direct):', passwordArray);
-    console.log('Index 4 value (direct):', passwordArray[4]);
-    console.log('First part length:', firstPart.length);
-    console.log('Last part defined:', lastPart ? 'yes' : 'no');
-    
     // Ensure we use the last character if it exists
     const formattedPassword = `${firstPart}-${lastPart}`;
-    
-    console.log('formattedPassword (direct): ', formattedPassword);
-    
+        
     setError('');
     setLoading(true);
 
@@ -158,7 +148,6 @@ export default function Login({ onLogin }: LoginProps) {
           <input
             ref={el => { 
               inputRefs.current[4] = el;
-              console.log("Last input ref set:", el ? "element" : "null");
             }}
             type="text"
             maxLength={1}

@@ -5,22 +5,22 @@
 @layer base {
   :root {
     /* 新配色方案 */
-    --v-bg-dark: #1a1d21; /* Dark background */
-    --v-bg-panel: rgba(30, 33, 38, 0.85); /* Semi-transparent panel */
-    --v-text-primary: #ffffff; /* White text for dark backgrounds */
-    --v-text-secondary: #e0e0e0; /* Light gray text for secondary content */
+    --v-bg-dark: #1a1d21; /* Dark background (黑灰色) */
+    --v-bg-panel: rgba(30, 33, 38, 0.85); /* Semi-transparent dark panel */
+    --v-text-primary: #e0e0e0; /* Light text (淡白色) */
+    --v-text-secondary: #c0c0c0; /* Light gray text for secondary content */
     --v-text-on-accent: #111111; /* Dark text for use on accent backgrounds */
-    --v-accent-gold: #00e0d8; /* Teal/Cyan highlight */
-    --v-border-metal: #4a4e54;
+    --v-accent-gold: #e0a639; /* Amber/gold highlight */
+    --v-border-metal: #4a4e54; /* Gray border */
     
     /* 新增和修改颜色 */
-    --v-emerald-400: #00e0d8;
-    --v-emerald-700: #008f8a;
-    --v-wheat-200: #e0e0e0;
-    --v-wheat-300: #c0c0c0;
+    --v-emerald-400: #e0a639; /* Amber highlight */
+    --v-emerald-700: #a36627; /* Amber secondary */
+    --v-wheat-200: #e0e0e0; /* Light gray */
+    --v-wheat-300: #c0c0c0; /* Medium gray */
     --v-sidebar-item-hover-bg: rgba(255, 255, 255, 0.1);
     --v-sidebar-active-bg: var(--v-accent-gold);
-    --v-sidebar-active-text: #111111;
+    --v-sidebar-active-text: #111111; /* Dark text */
 
     /* 字体 */
     --font-display: 'Noto Sans SC', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -46,6 +46,19 @@
     --anim-normal: 300ms;
     --easing-in: cubic-bezier(0.4, 0, 0.2, 1);
     --easing-out: cubic-bezier(0.0, 0, 0.2, 1);
+
+    /* Dark backgrounds with amber highlights */
+    --main-bg-color: #1a1d21;
+    --main-text-color: #e0e0e0; 
+    --primary-color: #e0a639;
+    --accent-color: #e0a639;
+
+    /* Neutral gray materials palette */
+    --dark-brown: #1e2228;
+    --light-brown: #2a2d31;
+    --parchment: #2a2d31;
+    --leather: #3d4147;
+    --wood: #4a4e54;
   }
 
   body {
@@ -134,22 +147,21 @@
   background: var(--v-accent-gold);
 }
 
+/* 笔记输入框半透明背景 */
+.transparent-textarea {
+  background-color: rgba(15, 17, 21, 0.4) !important;
+  backdrop-filter: blur(4px);
+  color: var(--v-text-primary);
+  transition: all 0.2s ease;
+}
+
+.transparent-textarea:focus {
+  background-color: rgba(15, 17, 21, 0.6) !important;
+}
+
 /* 额外的自定义样式 */
 .bg-gray-850 {
   background-color: #1e1e24;
-}
-
-/* Base styles */
-:root {
-  --main-bg-color: #0f0f12;
-  --main-text-color: #eaeaea;
-  --primary-color: #63c6d4;
-  --accent-color: #e0a639;
-  --dark-brown: #2c2318;
-  --light-brown: #5a4a33;
-  --parchment: #f2e8c0;
-  --leather: #8b5a2b;
-  --wood: #614126;
 }
 
 * {
@@ -203,7 +215,7 @@ html, body {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  border: 3px solid var(--accent-color);
+  border: 3px solid var(--v-accent-gold);
   background-color: var(--dark-brown);
   display: flex;
   align-items: center;
@@ -242,7 +254,7 @@ html, body {
 
 /* 给容器添加古老纹理边框 */
 .border-norse {
-  @apply border-2 border-amber-500/30 relative;
+  @apply border-2 border-teal-400/30 relative;
   background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%239C92AC' fill-opacity='0.08' fill-rule='evenodd'%3E%3Cpath d='M5 0h1L0 5V4L5 0zm1 5v1H5l1-1z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
@@ -250,7 +262,7 @@ html, body {
 .norse-divider {
   position: relative;
   height: 2px;
-  background: linear-gradient(90deg, rgba(217, 119, 6, 0), rgba(217, 119, 6, 0.3), rgba(217, 119, 6, 0));
+  background: linear-gradient(90deg, rgba(0, 224, 216, 0), rgba(0, 224, 216, 0.3), rgba(0, 224, 216, 0));
 }
 
 .norse-divider::before,
@@ -262,7 +274,7 @@ html, body {
   transform: translate(-50%, -50%);
   height: 10px;
   width: 10px;
-  background-color: rgba(217, 119, 6, 0.3);
+  background-color: rgba(0, 224, 216, 0.3);
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 
@@ -276,7 +288,7 @@ html, body {
 
 /* 北欧风格按钮 */
 .btn-norse {
-  @apply relative overflow-hidden bg-gradient-to-b from-amber-700/30 to-amber-900/30 border border-amber-500/30 text-amber-300 font-bold px-6 py-2 rounded;
+  @apply relative overflow-hidden bg-gradient-to-b from-teal-400/30 to-teal-600/30 border border-teal-400/30 text-teal-300 font-bold px-6 py-2 rounded;
 }
 
 .btn-norse::before {
@@ -296,10 +308,10 @@ html, body {
 
 /* 北欧装饰框架 */
 .frame-norse {
-  @apply relative p-4 border border-amber-500/30 rounded-md;
+  @apply relative p-4 border border-teal-400/30 rounded-md;
   background-image: 
-    linear-gradient(to right, rgba(217, 119, 6, 0.3) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(217, 119, 6, 0.3) 1px, transparent 1px);
+    linear-gradient(to right, rgba(0, 224, 216, 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 224, 216, 0.3) 1px, transparent 1px);
   background-size: 20px 20px;
   background-color: rgba(30, 41, 59, 0.6);
 }
@@ -312,17 +324,17 @@ html, body {
   right: 0;
   bottom: 0;
   background-image: 
-    repeating-linear-gradient(45deg, rgba(217, 119, 6, 0.1) 0, rgba(217, 119, 6, 0.1) 1px, transparent 1px, transparent 4px);
+    repeating-linear-gradient(45deg, rgba(0, 224, 216, 0.1) 0, rgba(0, 224, 216, 0.1) 1px, transparent 1px, transparent 4px);
   pointer-events: none;
 }
 
 /* 添加背景纹理 */
 .bg-norse-pattern {
   background-color: rgb(17, 24, 39);
-  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d97706' fill-opacity='0.05' fill-rule='evenodd'%3E%3Cpath d='M0 20.5L20 0l20 20.5L20 40z'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%2300e0d8' fill-opacity='0.05' fill-rule='evenodd'%3E%3Cpath d='M0 20.5L20 0l20 20.5L20 40z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* 背景渐变 */
 .bg-norse-gradient {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+  background: linear-gradient(135deg, rgba(26, 29, 33, 0.9), rgba(15, 17, 21, 0.9));
 }

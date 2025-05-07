@@ -2,9 +2,9 @@
 
 // 1. 用户
 export interface User {
-  id: string;             // 主键
-  name: string;           // 用户名
+  user_id: number;         // 主键
   password: string;       // 登录密码
+  total_points: number;   // 总积分
   created_at: string;     // 创建时间
 }
 

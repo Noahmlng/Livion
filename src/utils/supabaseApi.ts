@@ -47,7 +47,7 @@ export const supabaseApi = {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userId)
+        .eq('user_id', userId)
         .single();
       
       if (error) {
@@ -61,7 +61,7 @@ export const supabaseApi = {
     /**
      * 创建新用户
      */
-    async create(user: Omit<User, 'id' | 'created_at'>): Promise<User> {
+    async create(user: Omit<User, 'user_id' | 'created_at'>): Promise<User> {
       const { data, error } = await supabase
         .from('users')
         .insert(user)
@@ -83,7 +83,7 @@ export const supabaseApi = {
       const { error } = await supabase
         .from('users')
         .update(updates)
-        .eq('id', userId);
+        .eq('user_id', userId);
       
       if (error) {
         console.error('Error updating user:', error);
@@ -200,6 +200,30 @@ export const supabaseApi = {
       
       if (error) {
         console.error('Error fetching schedule entries:', error);
+        throw error;
+      }
+      
+      return data || [];
+    },
+    
+    /**
+     * 获取日期范围内的日程安排
+     */
+    async getByDateRange(startDate: Date | string, endDate: Date | string, userId: string | number): Promise<ScheduleEntry[]> {
+      const formattedStartDate = formatDate(startDate);
+      const formattedEndDate = formatDate(endDate);
+      
+      console.log(`Fetching schedule entries from ${formattedStartDate} to ${formattedEndDate} for user: ${userId}`);
+      
+      const { data, error } = await supabase
+        .from('schedule_entries')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', formattedStartDate)
+        .lte('date', formattedEndDate);
+      
+      if (error) {
+        console.error('Error fetching schedule entries by date range:', error);
         throw error;
       }
       

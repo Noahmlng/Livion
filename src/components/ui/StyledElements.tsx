@@ -25,7 +25,8 @@ export const WorldContainer = styled.div`
 // Top navigation tabs (styled like RPG menu tabs)
 export const TabsContainer = styled.div`
   display: flex;
-  background-color: rgba(44, 35, 24, 0.85);
+  /* Semi-transparent panel background that matches the new palette */
+  background-color: rgba(42, 45, 49, 0.85);
   padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
   border-bottom: ${({ theme }) => theme.border.width.medium} solid ${({ theme }) => theme.colors.leather};
   justify-content: center;
