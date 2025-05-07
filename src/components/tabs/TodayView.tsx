@@ -11,13 +11,14 @@ import {
 import morningBg from '../../assets/morning-bg.jpg';
 import afternoonBg from '../../assets/afternoon-bg.jpg';
 import eveningBg from '../../assets/evening-bg.jpg';
+import './hideScrollbar.css';
 
 // 时间段类型
 type TimeSlot = 'morning' | 'afternoon' | 'evening';
 
 // 时间段配置
 const TIME_SLOTS = [
-  { id: 'morning', name: '上午', color: 'from-amber-700/20 to-amber-600/10' },
+  { id: 'morning', name: '上午', color: 'from-gray-700/20 to-gray-600/10' },
   { id: 'afternoon', name: '下午', color: 'from-emerald-700/20 to-emerald-600/10' },
   { id: 'evening', name: '晚上', color: 'from-indigo-700/20 to-indigo-600/10' },
 ];
@@ -52,14 +53,30 @@ interface Note {
   createdAt: Date;
 }
 
+// 辅助函数：转换UTC时间到北京时间 (UTC+8)
+const toBeijingTime = (date: Date): Date => {
+  return new Date(date.getTime() + 8 * 60 * 60 * 1000);
+};
+
+// 辅助函数：从北京时间转回UTC时间
+const fromBeijingTime = (date: Date): Date => {
+  return new Date(date.getTime() - 8 * 60 * 60 * 1000);
+};
+
 const TodayView = () => {
   const { categories } = useValhallaTaskContext();
   const { 
     scheduleEntries, 
     loadScheduleEntries, 
+    loadScheduleEntriesRange,
     createScheduleEntry, 
     updateScheduleEntry, 
-    deleteScheduleEntry 
+    deleteScheduleEntry,
+    notes,
+    loadNotes,
+    createNote,
+    updateNote,
+    deleteNote
   } = useDb();
   
   // 状态
@@ -72,49 +89,201 @@ const TodayView = () => {
   const editInputRef = useRef<HTMLInputElement>(null);
   const [forceUpdateKey, setForceUpdateKey] = useState(0);
   
+  // 任务列表折叠状态
+  const [challengesCollapsed, setChallengesCollapsed] = useState(false);
+  const [templatesCollapsed, setTemplatesCollapsed] = useState(false);
+  
   // 下方标签页状态
   const [activeTab, setActiveTab] = useState<'history' | 'notes'>('history');
   const [taskHistory, setTaskHistory] = useState<TaskHistoryDay[]>([]);
   const [visibleDays, setVisibleDays] = useState(7);
-  const [notes, setNotes] = useState<Note[]>([]);
+  const [notesState, setNotesState] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState('');
   const historyContainerRef = useRef<HTMLDivElement>(null);
+  const noteContainerRef = useRef<HTMLDivElement>(null);
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [notesPage, setNotesPage] = useState(1);
+  const [hasMoreNotes, setHasMoreNotes] = useState(true);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   // Force a rerender of the DragDropContext on mount to fix initialization issues
   useEffect(() => {
     resetServerContext();
     setForceUpdateKey(prev => prev + 1);
     
-    // 生成示例历史数据
-    generateMockTaskHistory();
-    
-    // 生成示例笔记
-    generateMockNotes();
-    
     // 加载今天的任务安排
     loadTodayScheduleEntries();
+    
+    // 加载初始历史数据
+    loadHistoryData();
+    
+    // 加载笔记数据
+    loadNotesData();
   }, []);
   
   // 从数据库加载今天的任务安排
   const loadTodayScheduleEntries = async () => {
-    const today = new Date();
-    await loadScheduleEntries(today);
+    // 获取北京时间的今天
+    const beijingNow = new Date();
+    
+    // 计算北京时间今天的开始和结束
+    const beijingDayStart = new Date(beijingNow);
+    beijingDayStart.setHours(0, 0, 0, 0);
+    
+    const beijingDayEnd = new Date(beijingNow);
+    beijingDayEnd.setHours(23, 59, 59, 999);
+    
+    // 转换为UTC时间
+    const utcDayStart = fromBeijingTime(beijingDayStart);
+    const utcDayEnd = fromBeijingTime(beijingDayEnd);
+    
+    console.log('加载日期范围:', 
+      `北京时间: ${beijingDayStart.toISOString()} - ${beijingDayEnd.toISOString()}`,
+      `UTC时间: ${utcDayStart.toISOString()} - ${utcDayEnd.toISOString()}`
+    );
+    
+    // 使用日期范围加载数据
+    const entriesByDate = await loadScheduleEntriesRange(utcDayStart, utcDayEnd);
+    
+    // 将所有日期的条目合并为单一数组
+    const allEntries: any[] = [];
+    Object.values(entriesByDate).forEach(entries => {
+      allEntries.push(...entries);
+    });
+    
+    // 手动更新scheduleEntries状态
+    if (allEntries.length > 0) {
+      console.log('找到今日（北京时间）的任务:', allEntries.length, allEntries);
+      
+      // 将数据转换为UI格式并更新状态
+      const mappedTasks = allEntries.map(entry => ({
+        id: entry.entry_id.toString(),
+        title: entry.custom_name || '',
+        timeSlot: entry.slot as TimeSlot,
+        sourceType: entry.task_type as 'challenge' | 'template' | 'custom',
+        sourceId: entry.ref_task_id?.toString() || entry.ref_template_id?.toString(),
+        completed: entry.status === 'completed'
+      }));
+      
+      setScheduledTasks(mappedTasks);
+    } else {
+      console.log('今日（北京时间）没有找到任务');
+      setScheduledTasks([]);
+    }
+  };
+  
+  // 新增方法: 从数据库加载历史任务记录
+  const loadHistoryData = async (daysToLoad = 7, startFromDay = 0) => {
+    setLoading(true);
+    
+    try {
+      // 使用北京时间作为基准
+      const beijingNow = new Date();
+      
+      // 计算北京时间日期范围
+      const beijingStartDate = new Date(beijingNow);
+      beijingStartDate.setDate(beijingStartDate.getDate() - (startFromDay + daysToLoad - 1));
+      beijingStartDate.setHours(0, 0, 0, 0);
+      
+      const beijingEndDate = new Date(beijingNow);
+      beijingEndDate.setDate(beijingEndDate.getDate() - startFromDay);
+      beijingEndDate.setHours(23, 59, 59, 999);
+      
+      // 转换为UTC时间（数据库存的是UTC时间）
+      const utcStartDate = fromBeijingTime(beijingStartDate);
+      const utcEndDate = fromBeijingTime(beijingEndDate);
+      
+      console.log('加载历史数据日期范围:', 
+        `北京时间: ${beijingStartDate.toISOString()} - ${beijingEndDate.toISOString()}`,
+        `UTC时间: ${utcStartDate.toISOString()} - ${utcEndDate.toISOString()}`
+      );
+      
+      // 一次性获取整个日期范围的数据
+      const entriesByDate = await loadScheduleEntriesRange(utcStartDate, utcEndDate);
+      
+      // 处理每一天的数据
+      const newHistoryData: TaskHistoryDay[] = [];
+      
+      // 遍历日期范围
+      for (let i = startFromDay; i < startFromDay + daysToLoad; i++) {
+        // 计算北京时间的日期
+        const beijingDate = new Date(beijingNow);
+        beijingDate.setDate(beijingDate.getDate() - i);
+        beijingDate.setHours(0, 0, 0, 0);
+        
+        // 格式化日期显示（使用北京时间展示）
+        const formattedDate = beijingDate.toLocaleDateString('zh-CN', {
+          month: 'long',
+          day: 'numeric',
+          weekday: 'long'
+        });
+        
+        // 获取该日期的数据（转为UTC时间查询数据库）
+        const utcDate = fromBeijingTime(beijingDate);
+        // 只取日期部分用于查询
+        const dateStr = utcDate.toISOString().split('T')[0];
+        const entriesForDay = entriesByDate[dateStr] || [];
+        
+        console.log(`北京时间 ${beijingDate.toISOString().split('T')[0]} (UTC ${dateStr}) 的任务数: ${entriesForDay.length}`);
+        
+        // 将数据转换为 UI 格式
+        const tasksForDay = entriesForDay.map(entry => ({
+          id: entry.entry_id.toString(),
+          title: entry.custom_name || '',
+          completed: entry.status === 'completed',
+          timeSlot: entry.slot as TimeSlot
+        }));
+        
+        // 只有有任务的日期才添加到历史记录中
+        if (tasksForDay.length > 0) {
+          newHistoryData.push({
+            date: beijingDate, // 使用北京时间存储日期
+            formattedDate,
+            tasks: tasksForDay
+          });
+        }
+      }
+      
+      // 将新加载的历史数据添加到现有数据后面
+      if (startFromDay === 0) {
+        setTaskHistory(newHistoryData);
+      } else {
+        setTaskHistory(prevHistory => [...prevHistory, ...newHistoryData]);
+      }
+    } catch (error) {
+      console.error('加载历史数据失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 添加加载更多历史数据的方法
+  const loadMoreHistory = () => {
+    loadHistoryData(7, visibleDays);
+    setVisibleDays(prev => prev + 7);
   };
   
   // 当数据库中的调度条目更改时更新本地状态
   useEffect(() => {
     if (scheduleEntries.length > 0) {
-      const mappedTasks = scheduleEntries.map(entry => ({
-        id: entry.id,
-        title: entry.title,
-        timeSlot: entry.timeSlot as TimeSlot,
-        sourceType: entry.sourceType as 'challenge' | 'template' | 'custom',
-        sourceId: entry.sourceId,
-        completed: entry.completed
-      }));
+      console.log('Converting schedule entries to UI format:', scheduleEntries);
+      const mappedTasks = scheduleEntries.map(entry => {
+        // 处理数据库格式到UI格式的转换
+        // 数据库格式: { entry_id, slot, date, status, task_type, custom_name, ... }
+        // UI格式: { id, title, timeSlot, sourceType, completed, ... }
+        return {
+          id: entry.entry_id.toString(),
+          title: entry.custom_name || '',
+          timeSlot: entry.slot as TimeSlot,
+          sourceType: entry.task_type as 'challenge' | 'template' | 'custom',
+          sourceId: entry.ref_task_id?.toString() || entry.ref_template_id?.toString(),
+          completed: entry.status === 'completed'
+        };
+      });
+      console.log('Mapped tasks for UI:', mappedTasks);
       setScheduledTasks(mappedTasks);
     }
   }, [scheduleEntries]);
@@ -126,7 +295,7 @@ const TodayView = () => {
         const { scrollTop, scrollHeight, clientHeight } = historyContainerRef.current;
         // 当滚动到接近底部时，加载更多数据
         if (scrollTop + clientHeight >= scrollHeight - 100) {
-          setVisibleDays(prev => prev + 7);
+          loadMoreHistory();
         }
       }
     };
@@ -143,73 +312,120 @@ const TodayView = () => {
     };
   }, [taskHistory]);
   
-  // 生成示例历史数据（实际应用中需要从数据库获取）
-  const generateMockTaskHistory = () => {
-    const mockHistory: TaskHistoryDay[] = [];
-    const now = new Date();
+  // 加载笔记数据
+  const loadNotesData = async (page = 1, reset = true) => {
+    if (notesLoading) return;
+    setNotesLoading(true);
     
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
+    try {
+      // 加载数据库中的笔记
+      await loadNotes();
       
-      const formattedDate = date.toLocaleDateString('zh-CN', {
-        month: 'long',
-        day: 'numeric',
-        weekday: 'long'
-      });
-      
-      // 每天 3-8 条随机任务
-      const tasksCount = Math.floor(Math.random() * 6) + 3;
-      const tasks = [];
-      
-      for (let j = 0; j < tasksCount; j++) {
-        const timeSlots: TimeSlot[] = ['morning', 'afternoon', 'evening'];
-        tasks.push({
-          id: `history-${i}-${j}`,
-          title: `历史任务 ${i+1}-${j+1}`,
-          completed: Math.random() > 0.3, // 70% 完成率
-          timeSlot: timeSlots[j % 3]
+      if (reset) {
+        // 重置分页状态
+        setNotesPage(1);
+        
+        // 使用数据库中的笔记
+        const dbNotes = notes.slice(0, 10).map(note => {
+          // 确保日期是有效的
+          const createdTime = note.created_at ? new Date(note.created_at) : new Date();
+          return {
+            id: note.note_id.toString(),
+            content: note.content,
+            // 将UTC时间转换为北京时间
+            createdAt: toBeijingTime(createdTime)
+          };
         });
+        
+        setNotesState(dbNotes);
+        setHasMoreNotes(notes.length > 10);
+      } else {
+        // 加载更多笔记（分页）
+        const startIndex = (page - 1) * 10;
+        const newNotes = notes.slice(startIndex, startIndex + 10).map(note => {
+          // 确保日期是有效的
+          const createdTime = note.created_at ? new Date(note.created_at) : new Date();
+          return {
+            id: note.note_id.toString(),
+            content: note.content,
+            // 将UTC时间转换为北京时间
+            createdAt: toBeijingTime(createdTime)
+          };
+        });
+        
+        setNotesState(prevNotes => [...prevNotes, ...newNotes]);
+        setHasMoreNotes(notes.length > startIndex + 10);
       }
-      
-      mockHistory.push({ date, formattedDate, tasks });
+    } catch (error) {
+      console.error('加载笔记失败:', error);
+    } finally {
+      setNotesLoading(false);
     }
-    
-    setTaskHistory(mockHistory);
   };
   
-  // 生成示例笔记数据
-  const generateMockNotes = () => {
-    const mockNotes: Note[] = [];
-    const now = new Date();
-    
-    for (let i = 0; i < 15; i++) {
-      const createdAt = new Date(now);
-      createdAt.setDate(createdAt.getDate() - i);
-      createdAt.setHours(Math.floor(Math.random() * 24));
-      
-      mockNotes.push({
-        id: `note-${i}`,
-        content: `这是一条示例笔记，记录了一些重要的想法和灵感。笔记 #${i+1}`,
-        createdAt
-      });
-    }
-    
-    setNotes(mockNotes);
+  // 加载更多笔记
+  const loadMoreNotes = () => {
+    const nextPage = notesPage + 1;
+    setNotesPage(nextPage);
+    loadNotesData(nextPage, false);
   };
   
-  // 创建新笔记
-  const createNewNote = () => {
-    if (!newNote.trim()) return;
-    
-    const newNoteObj: Note = {
-      id: `note-${Date.now()}`,
-      content: newNote,
-      createdAt: new Date()
+  // 监听笔记容器的滚动
+  useEffect(() => {
+    const handleScroll = () => {
+      if (noteContainerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = noteContainerRef.current;
+        
+        // 滚动到底部时加载更多
+        if (scrollTop + clientHeight >= scrollHeight - 50 && hasMoreNotes && !notesLoading) {
+          loadMoreNotes();
+        }
+      }
     };
     
-    setNotes([newNoteObj, ...notes]);
-    setNewNote('');
+    const container = noteContainerRef.current;
+    if (container && activeTab === 'notes') {
+      container.addEventListener('scroll', handleScroll);
+    }
+    
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [notesState, hasMoreNotes, notesLoading, activeTab, notesPage]);
+  
+  // 创建新笔记
+  const createNewNote = async () => {
+    if (!newNote.trim()) return;
+    
+    try {
+      // 创建新笔记到数据库
+      const result = await createNote(newNote.trim());
+      
+      if (result) {
+        // 确保日期是有效的
+        const createdTime = result.created_at ? new Date(result.created_at) : new Date();
+        
+        // 添加到本地状态
+        const newNoteObj: Note = {
+          id: result.note_id.toString(),
+          content: result.content,
+          // 将UTC时间转换为北京时间
+          createdAt: toBeijingTime(createdTime)
+        };
+        
+        console.log('创建新笔记:', 
+          `UTC时间: ${createdTime.toISOString()}`, 
+          `北京时间: ${newNoteObj.createdAt.toISOString()}`
+        );
+        
+        setNotesState([newNoteObj, ...notesState]);
+        setNewNote('');
+      }
+    } catch (error) {
+      console.error('创建笔记失败:', error);
+    }
   };
   
   // 开始编辑笔记
@@ -226,15 +442,38 @@ const TodayView = () => {
   };
   
   // 保存编辑的笔记
-  const saveEditedNote = () => {
+  const saveEditedNote = async () => {
     if (editingNoteId) {
-      setNotes(notes.map(note => 
-        note.id === editingNoteId 
-          ? { ...note, content: editingNoteContent.trim() || note.content } 
-          : note
-      ));
-      setEditingNoteId(null);
-      setEditingNoteContent('');
+      try {
+        // 更新数据库中的笔记
+        const success = await updateNote(editingNoteId, editingNoteContent.trim() || '');
+        
+        if (success) {
+          // 获取当前UTC时间
+          const now = new Date();
+          // 转换为北京时间
+          const beijingNow = toBeijingTime(now);
+          
+          console.log('更新笔记时间:', 
+            `UTC时间: ${now.toISOString()}`, 
+            `北京时间: ${beijingNow.toISOString()}`
+          );
+          
+          // 更新本地状态
+          setNotesState(notes => 
+            notes.map(note => 
+              note.id === editingNoteId 
+                ? { ...note, content: editingNoteContent.trim() || note.content, createdAt: beijingNow } 
+                : note
+            )
+          );
+        }
+      } catch (error) {
+        console.error('更新笔记失败:', error);
+      } finally {
+        setEditingNoteId(null);
+        setEditingNoteContent('');
+      }
     }
   };
   
@@ -249,8 +488,18 @@ const TodayView = () => {
   };
   
   // 删除笔记
-  const deleteNote = (noteId: string) => {
-    setNotes(notes.filter(note => note.id !== noteId));
+  const deleteNoteHandler = async (noteId: string) => {
+    try {
+      // 从数据库中删除
+      const success = await deleteNote(noteId);
+      
+      if (success) {
+        // 从本地状态中删除
+        setNotesState(notes => notes.filter(note => note.id !== noteId));
+      }
+    } catch (error) {
+      console.error('删除笔记失败:', error);
+    }
   };
   
   // 背景图映射
@@ -273,13 +522,20 @@ const TodayView = () => {
       prev.map(task => task.id === taskId ? { ...task, completed: newCompletedState } : task)
     );
     
-    // 更新数据库
-    await updateScheduleEntry(taskId, { is_completed: newCompletedState });
+    // 更新数据库 - 转换为数据库格式的字段名
+    await updateScheduleEntry(taskId, { 
+      status: newCompletedState ? 'completed' : 'ongoing' 
+    });
   };
   
   // 获取支线任务和日常任务
   const challengeTasks = categories.find(cat => cat.id === 'side')?.tasks || [];
   const templateTasks = categories.find(cat => cat.id === 'daily')?.tasks || [];
+  
+  // 安全地生成拖拽 ID
+  const getSafeDraggableId = (prefix: string, id: string) => {
+    return `${prefix}-${id.replace(/^side-/, '')}`;
+  };
   
   // 启用编辑模式
   const startEditing = (taskId: string, initialText: string) => {
@@ -293,28 +549,28 @@ const TodayView = () => {
 
   // 保存编辑的任务
   const saveEditedTask = async () => {
-    if (editingTaskId) {
-      const newTitle = editingText.trim();
-      if (!newTitle) {
-        cancelEditing();
-        return;
-      }
-      
-      // 更新本地状态
-      setScheduledTasks(prev => 
-        prev.map(task => 
-          task.id === editingTaskId 
-            ? { ...task, title: newTitle } 
-            : task
-        )
-      );
-      
-      // 更新数据库
-      await updateScheduleEntry(editingTaskId, { title: newTitle });
-      
-      setEditingTaskId(null);
-      setEditingText('');
+    if (!editingTaskId || !editingText.trim()) {
+      cancelEditing();
+      return;
     }
+    
+    // 更新本地状态
+    setScheduledTasks(prev => 
+      prev.map(task => 
+        task.id === editingTaskId 
+          ? { ...task, title: editingText.trim() } 
+          : task
+      )
+    );
+    
+    // 更新数据库 - 转换为数据库格式的字段名
+    await updateScheduleEntry(editingTaskId, { 
+      custom_name: editingText.trim() 
+    });
+    
+    // 清除编辑状态
+    setEditingTaskId(null);
+    setEditingText('');
   };
 
   // 取消编辑
@@ -339,12 +595,25 @@ const TodayView = () => {
     // 创建新任务对象
     const title = newTaskText[timeSlot].trim();
     
-    // 创建数据库条目
-    const today = new Date();
+    // 创建数据库条目 - 使用北京时间的今天
+    const beijingToday = new Date();
+    
+    // 确保使用今天的日期部分(0点0分0秒)
+    const beijingDayStart = new Date(beijingToday);
+    beijingDayStart.setHours(0, 0, 0, 0);
+    
+    // 转换为UTC时间
+    const utcToday = fromBeijingTime(beijingDayStart);
+    
+    console.log('创建任务使用日期:', 
+      `北京时间: ${beijingDayStart.toISOString()}`, 
+      `UTC时间: ${utcToday.toISOString()}`
+    );
+    
     const result = await createScheduleEntry({
       title,
-      time_slot: timeSlot,
-      scheduled_date: today,
+      timeSlot: timeSlot,
+      scheduled_date: utcToday,
       source_type: 'custom'
     });
     
@@ -364,83 +633,19 @@ const TodayView = () => {
     await deleteScheduleEntry(taskId);
   };
   
-  // 处理任务拖拽结束
-  const handleDragEnd = async (result: any) => {
-    const { source, destination } = result;
+  // 将任务从一个时间段移动到另一个时间段
+  const moveTaskBetweenSlots = async (taskId: string, newSlot: TimeSlot) => {
+    // 更新本地状态
+    setScheduledTasks(prev => 
+      prev.map(task => 
+        task.id === taskId 
+          ? { ...task, timeSlot: newSlot } 
+          : task
+      )
+    );
     
-    console.log('Drag result:', result);
-    
-    // 如果没有目的地或者没有移动，则返回
-    if (!destination || 
-        (source.droppableId === destination.droppableId && 
-         source.index === destination.index)) {
-      console.log('No valid destination or no movement');
-      return;
-    }
-    
-    // 从支线任务或模板任务列表拖到时间段
-    if ((source.droppableId === 'challenges' || source.droppableId === 'templates') && 
-        ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
-      console.log('Dragging from task lists to time slot');
-      
-      const sourceList = source.droppableId === 'challenges' ? challengeTasks : templateTasks;
-      const taskToAdd = sourceList[source.index];
-      console.log('Task to add:', taskToAdd);
-      
-      // 提取ID时去掉前缀
-      const draggableId = result.draggableId;
-      const prefix = source.droppableId === 'challenges' ? 'challenge-' : 'template-';
-      const taskId = draggableId.startsWith(prefix) ? draggableId.substring(prefix.length) : draggableId;
-      
-      // 找到对应原始任务
-      const originalTask = sourceList.find(t => t.id === taskId) || taskToAdd;
-      
-      // 创建数据库条目
-      const today = new Date();
-      const taskSourceType = source.droppableId === 'challenges' ? 'challenge' : 'template';
-      const newEntryData = {
-        title: originalTask.title,
-        time_slot: destination.droppableId,
-        scheduled_date: today,
-        source_type: taskSourceType,
-        task_id: taskSourceType === 'challenge' ? originalTask.id : undefined,
-        template_id: taskSourceType === 'template' ? originalTask.id : undefined
-      };
-      
-      await createScheduleEntry(newEntryData);
-      
-      // 重新加载今天的任务
-      await loadTodayScheduleEntries();
-      return;
-    }
-    
-    // 时间段内的任务重新排序或者在时间段之间移动
-    if (['morning', 'afternoon', 'evening'].includes(source.droppableId) &&
-        ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
-      console.log('Moving between time slots');
-      
-      // 找出要移动的任务
-      const tasksInSourceSlot = scheduledTasks.filter(task => task.timeSlot === source.droppableId);
-      const taskToMove = tasksInSourceSlot[source.index];
-      console.log('Task to move:', taskToMove);
-      
-      // 如果时间段发生了变化，更新数据库
-      if (source.droppableId !== destination.droppableId) {
-        // 更新本地状态
-        setScheduledTasks(prev => 
-          prev.map(task => 
-            task.id === taskToMove.id 
-              ? { ...task, timeSlot: destination.droppableId as TimeSlot } 
-              : task
-          )
-        );
-        
-        // 更新数据库
-        await updateScheduleEntry(taskToMove.id, {
-          time_slot: destination.droppableId
-        });
-      }
-    }
+    // 更新数据库 - 使用正确的字段名
+    await updateScheduleEntry(taskId, { slot: newSlot });
   };
   
   // 渲染每个时间段的面板内容
@@ -463,8 +668,8 @@ const TodayView = () => {
           onMouseLeave={() => setHoveredSlot(null)}
         >
           <div className="absolute inset-0 bg-black/60"></div>
-          <div className="relative flex-1 flex flex-col p-4 overflow-auto">
-            <Droppable droppableId={slot} direction="vertical">
+          <div className="relative flex-1 flex flex-col p-4 overflow-auto hide-scrollbar">
+            <Droppable droppableId={slot} direction="vertical" isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
               {(provided: any, snapshot: any) => (
                 <div 
                   ref={provided.innerRef} 
@@ -547,39 +752,60 @@ const TodayView = () => {
   
   // 渲染历史标签页内容
   const renderHistoryTab = () => {
+    if (taskHistory.length === 0) {
+      return (
+        <div 
+          ref={historyContainerRef}
+          className="flex-1 p-4 hide-scrollbar flex items-center justify-center"
+          style={{ height: '350px' }}
+        >
+          <div className="text-center">
+            <p className="text-text-secondary text-lg">暂无历史任务记录</p>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div 
         ref={historyContainerRef}
-        className="flex-1 p-4"
+        className="flex-1 p-4 hide-scrollbar"
         style={{ height: '350px' }}
       >
         <h2 className="font-display text-xl text-text-primary mb-4">历史任务记录</h2>
         <div className="grid grid-cols-2 gap-4">
-          {taskHistory.slice(0, visibleDays).map((day) => (
+          {taskHistory.map((day) => (
             <div key={day.date.toISOString()} className="valhalla-panel p-4">
               <h3 className="font-medium text-accent-gold mb-3">{day.formattedDate}</h3>
               <div className="space-y-2">
-                {day.tasks.map((task) => (
-                  <div 
-                    key={task.id} 
-                    className="flex items-center p-2 rounded bg-bg-panel/50 border border-border-metal"
-                  >
-                    <div className={`w-2 h-2 rounded-full mr-2 ${task.completed ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                    <span className={task.completed ? '' : 'text-red-400'}>
-                      {task.title}
-                    </span>
-                    <span className="ml-auto text-xs opacity-70">
-                      {TIME_SLOTS.find(s => s.id === task.timeSlot)?.name}
-                    </span>
-                  </div>
-                ))}
+                {/* 按照时间段排序任务 */}
+                {[...day.tasks]
+                  .sort((a, b) => {
+                    const timeSlotOrder = { 'morning': 0, 'afternoon': 1, 'evening': 2 };
+                    return timeSlotOrder[a.timeSlot] - timeSlotOrder[b.timeSlot];
+                  })
+                  .map((task) => (
+                    <div 
+                      key={task.id} 
+                      className="flex items-center p-2 rounded bg-bg-panel/50 border border-border-metal"
+                    >
+                      <div className={`w-2 h-2 rounded-full mr-2 ${task.completed ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className={task.completed ? '' : 'text-red-400'}>
+                        {task.title}
+                      </span>
+                      <span className="ml-auto text-xs opacity-70">
+                        {TIME_SLOTS.find(s => s.id === task.timeSlot)?.name}
+                      </span>
+                    </div>
+                  ))
+                }
               </div>
             </div>
           ))}
         </div>
-        {visibleDays < taskHistory.length && (
-          <div className="text-center pt-4 pb-2 opacity-70">
-            <p>向下滚动加载更多...</p>
+        {loading && (
+          <div className="text-center pt-4 pb-2">
+            <p className="text-accent-gold">加载更多数据中...</p>
           </div>
         )}
       </div>
@@ -593,97 +819,207 @@ const TodayView = () => {
         className="flex flex-col p-4"
         style={{ height: '350px' }}
       >
-        {/* 新建笔记区域 */}
-        <div className="mb-4 valhalla-panel p-4">
-          <h2 className="font-display text-xl text-accent-gold mb-3">新建笔记</h2>
-          <div className="flex flex-col">
+        {/* 新建笔记区域 - 简化版 */}
+        <div className="mb-4">
+          <div className="flex flex-col relative">
             <textarea
-              className="w-full p-3 bg-bg-panel border border-border-metal rounded-md min-h-[100px] text-text-primary focus:outline-none focus:border-accent-gold"
+              className="w-full p-3 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
               placeholder="记录你的想法和灵感..."
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && createNewNote()}
             />
-            <div className="flex justify-between items-center mt-2 text-sm">
-              <span className="opacity-70">Ctrl + Enter 快速保存</span>
-              <button 
-                className="px-4 py-2 bg-accent-gold/80 text-white rounded-md hover:bg-accent-gold"
-                onClick={createNewNote}
-              >
-                保存笔记
-              </button>
-            </div>
+            <button 
+              className="absolute bottom-3 right-3 text-accent-gold/80 hover:text-accent-gold"
+              onClick={createNewNote}
+              title="保存笔记 (Ctrl + Enter)"
+            >
+              {/* 纸飞机图标 - 顺时针旋转90度 */}
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
           </div>
         </div>
         
         {/* 笔记列表 */}
-        <div className="overflow-y-auto flex-1">
-          <h2 className="font-display text-lg text-accent-gold mb-3">我的笔记</h2>
-          <div className="space-y-3">
-            {notes.map((note) => (
-              <div
-                key={note.id}
-                className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
-                onDoubleClick={() => startEditingNote(note)}
-              >
-                {editingNoteId === note.id ? (
-                  <div className="flex flex-col">
-                    <textarea
-                      ref={noteTextareaRef}
-                      className="w-full p-2 bg-bg-panel border border-border-metal rounded-md min-h-[80px] text-text-primary focus:outline-none focus:border-accent-gold"
-                      value={editingNoteContent}
-                      onChange={(e) => setEditingNoteContent(e.target.value)}
-                      onKeyDown={handleNoteKeyDown}
-                    />
-                    <div className="flex justify-end mt-2">
+        <div 
+          ref={noteContainerRef}
+          className="overflow-y-auto flex-1 hide-scrollbar space-y-3"
+        >
+          {notesState.map((note) => (
+            <div
+              key={note.id}
+              className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
+              onDoubleClick={() => startEditingNote(note)}
+            >
+              {editingNoteId === note.id ? (
+                <div className="flex flex-col relative">
+                  <textarea
+                    ref={noteTextareaRef}
+                    className="w-full p-2 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
+                    value={editingNoteContent}
+                    onChange={(e) => setEditingNoteContent(e.target.value)}
+                    onKeyDown={handleNoteKeyDown}
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button 
+                      className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
+                      onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
+                    >
+                      取消
+                    </button>
+                    <button 
+                      className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
+                      onClick={saveEditedNote}
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="whitespace-pre-wrap mb-2">{note.content}</div>
+                  <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
+                    <span>
+                      {note.createdAt.toLocaleDateString()} {note.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <div>
                       <button 
-                        className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
-                        onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
+                        className="text-accent-gold hover:text-accent-gold/80 mr-2"
+                        onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
                       >
-                        取消
+                        编辑
                       </button>
                       <button 
-                        className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
-                        onClick={saveEditedNote}
+                        className="text-red-500 hover:text-red-400"
+                        onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
                       >
-                        保存
+                        删除
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    <div className="whitespace-pre-wrap mb-2">{note.content}</div>
-                    <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
-                      <span>
-                        {note.createdAt.toLocaleDateString()} {note.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <div>
-                        <button 
-                          className="text-accent-gold hover:text-accent-gold/80 mr-2"
-                          onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
-                        >
-                          编辑
-                        </button>
-                        <button 
-                          className="text-red-500 hover:text-red-400"
-                          onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+                </>
+              )}
+            </div>
+          ))}
+          
+          {notesLoading && (
+            <div className="text-center py-4">
+              <p className="text-accent-gold">加载更多笔记中...</p>
+            </div>
+          )}
+          
+          {!notesLoading && notesState.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-text-secondary text-lg">暂无笔记</p>
+            </div>
+          )}
         </div>
       </div>
     );
   };
   
+  // 切换支线任务折叠状态
+  const toggleChallengesCollapse = () => {
+    setChallengesCollapsed(!challengesCollapsed);
+  };
+
+  // 切换日常任务折叠状态
+  const toggleTemplatesCollapse = () => {
+    setTemplatesCollapsed(!templatesCollapsed);
+  };
+  
+  // 处理任务拖拽结束
+  const handleDragEnd = async (result: any) => {
+    const { source, destination } = result;
+    
+    console.log('Drag result:', result);
+    
+    // 如果没有目的地或者没有移动，则返回
+    if (!destination || 
+        (source.droppableId === destination.droppableId && 
+         source.index === destination.index)) {
+      console.log('No valid destination or no movement');
+      return;
+    }
+    
+    // 从支线任务或模板任务列表拖到时间段
+    if ((source.droppableId === 'challenges' || source.droppableId === 'templates') && 
+        ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
+      console.log('Dragging from task lists to time slot');
+      
+      const sourceList = source.droppableId === 'challenges' ? challengeTasks : templateTasks;
+      const taskToAdd = sourceList[source.index];
+      console.log('Task to add:', taskToAdd);
+      
+      // 提取ID时去掉前缀
+      const draggableId = result.draggableId;
+      const prefix = source.droppableId === 'challenges' ? 'challenge-' : 'template-';
+      const taskId = draggableId.startsWith(prefix) ? draggableId.substring(prefix.length) : draggableId;
+      
+      // 找到对应原始任务
+      const originalTask = sourceList.find(t => t.id === taskId || t.id === `side-${taskId}`) || taskToAdd;
+      
+      // 创建数据库条目 - 使用北京时间的今天
+      const beijingToday = new Date();
+      
+      // 确保使用今天的日期部分(0点0分0秒)
+      const beijingDayStart = new Date(beijingToday);
+      beijingDayStart.setHours(0, 0, 0, 0);
+      
+      // 转换为UTC时间
+      const utcToday = fromBeijingTime(beijingDayStart);
+      
+      console.log('拖拽创建任务使用日期:', 
+        `北京时间: ${beijingDayStart.toISOString()}`, 
+        `UTC时间: ${utcToday.toISOString()}`
+      );
+      
+      const taskSourceType = source.droppableId === 'challenges' ? 'challenge' : 'template';
+      
+      // 根据数据库模型创建适当的条目数据
+      const newEntryData = {
+        title: originalTask.title,
+        timeSlot: destination.droppableId as TimeSlot,
+        scheduled_date: utcToday,
+        source_type: taskSourceType as 'challenge' | 'template' | 'custom'
+      };
+      
+      // 根据源类型添加适当的ID字段
+      if (taskSourceType === 'challenge') {
+        Object.assign(newEntryData, { task_id: originalTask.id });
+      } else {
+        Object.assign(newEntryData, { template_id: originalTask.id });
+      }
+      
+      await createScheduleEntry(newEntryData);
+      
+      // 重新加载今天的任务
+      await loadTodayScheduleEntries();
+      return;
+    }
+    
+    // 时间段内的任务重新排序或者在时间段之间移动
+    if (['morning', 'afternoon', 'evening'].includes(source.droppableId) &&
+        ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
+      console.log('Moving between time slots');
+      
+      // 找出要移动的任务
+      const tasksInSourceSlot = scheduledTasks.filter(task => task.timeSlot === source.droppableId);
+      const taskToMove = tasksInSourceSlot[source.index];
+      console.log('Task to move:', taskToMove);
+      
+      // 如果时间段发生了变化，更新数据库
+      if (source.droppableId !== destination.droppableId) {
+        await moveTaskBetweenSlots(taskToMove.id, destination.droppableId as TimeSlot);
+      }
+    }
+  };
+  
   return (
     <DragDropContext key={`dnd-context-${forceUpdateKey}`} onDragEnd={handleDragEnd}>
-      <div className="flex flex-col gap-6 pb-40">
+      <div className="flex flex-col gap-6 pb-40 hide-scrollbar">
         {/* 上方时间段和任务源区域 */}
         <div className="flex gap-6 min-h-[400px]">
           {/* 左侧三个时间段 */}
@@ -692,90 +1028,139 @@ const TodayView = () => {
           </div>
           
           {/* 右侧任务列表（上下排列） */}
-          <div className="w-80 flex flex-col gap-4">
+          <div className="flex flex-col gap-4 transition-all duration-300">
             {/* 支线任务列表 */}
-            <div className="valhalla-panel overflow-auto flex-1">
-              <h3 className="font-display text-lg text-text-primary mb-4 pb-2 border-b border-border-metal">
-                支线任务
-              </h3>
-              <Droppable droppableId="challenges" isDropDisabled={false}>
-                {(provided: any, snapshot: any) => (
-                  <div 
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className="space-y-2 p-1"
+            <div className={`valhalla-panel overflow-hidden flex-1 flex ${challengesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
+              <div className={`flex items-center justify-center ${challengesCollapsed ? 'w-full' : 'hidden'}`}>
+                <button 
+                  className="p-1 hover:bg-sidebar-item-hover-bg rounded"
+                  onClick={toggleChallengesCollapse}
+                  title="展开支线任务"
+                >
+                  <span className="font-display text-accent-gold text-lg -rotate-90 whitespace-nowrap transform origin-center flex items-center">
+                    支线任务
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </button>
+              </div>
+              <div className={`flex-1 ${challengesCollapsed ? 'hidden' : 'block'}`}>
+                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2">
+                  <h3 className="font-display text-lg text-text-primary">
+                    支线任务
+                  </h3>
+                  <button 
+                    className="p-1 hover:bg-sidebar-item-hover-bg rounded"
+                    onClick={toggleChallengesCollapse}
+                    title="收起支线任务"
                   >
-                    {challengeTasks.map((task, index) => (
-                      <Draggable key={`challenge-${task.id}`} draggableId={`challenge-${task.id}`} index={index}>
-                        {(provided: any, snapshot: any) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
-                          >
-                            {snapshot.isDragging && (
-                              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
-                                拖拽到时间段
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
+                </div>
+                <Droppable droppableId="challenges" isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
+                  {(provided: any, snapshot: any) => (
+                    <div 
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="space-y-2 p-1"
+                    >
+                      {challengeTasks.filter(task => task && task.id).map((task, index) => (
+                        <Draggable key={getSafeDraggableId('challenge', task.id)} draggableId={getSafeDraggableId('challenge', task.id)} index={index}>
+                          {(provided: any, snapshot: any) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
+                            >
+                              {snapshot.isDragging && (
+                                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
+                                  拖拽到时间段
+                                </div>
+                              )}
+                              <div className="font-semibold">{task.title}</div>
+                              <div className="text-xs text-text-secondary">
+                                Rewards: {task.reward_points}
                               </div>
-                            )}
-                            <div className="font-semibold">{task.title}</div>
-                            <div className="text-xs text-text-secondary">
-                              Rewards: {task.reward_points}
                             </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
             </div>
             
             {/* 日常任务模板 */}
-            <div className="valhalla-panel overflow-auto flex-1">
-              <h3 className="font-display text-lg text-text-primary mb-4 pb-2 border-b border-border-metal">
-                日常任务
-              </h3>
-              <Droppable droppableId="templates" isDropDisabled={false}>
-                {(provided: any, snapshot: any) => (
-                  <div 
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className="space-y-2 p-1"
+            <div className={`valhalla-panel overflow-hidden flex-1 flex ${templatesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
+              <div className={`flex items-center justify-center ${templatesCollapsed ? 'w-full' : 'hidden'}`}>
+                <button 
+                  className="p-1 hover:bg-sidebar-item-hover-bg rounded"
+                  onClick={toggleTemplatesCollapse}
+                  title="展开日常任务"
+                >
+                  <span className="font-display text-accent-gold text-lg -rotate-90 whitespace-nowrap transform origin-center flex items-center">
+                    日常任务
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </button>
+              </div>
+              <div className={`flex-1 ${templatesCollapsed ? 'hidden' : 'block'}`}>
+                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2">
+                  <h3 className="font-display text-lg text-text-primary">
+                    日常任务
+                  </h3>
+                  <button 
+                    className="p-1 hover:bg-sidebar-item-hover-bg rounded"
+                    onClick={toggleTemplatesCollapse}
+                    title="收起日常任务"
                   >
-                    {templateTasks.map((task, index) => (
-                      <Draggable key={`template-${task.id}`} draggableId={`template-${task.id}`} index={index}>
-                        {(provided: any, snapshot: any) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
-                          >
-                            {snapshot.isDragging && (
-                              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
-                                拖拽到时间段
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
+                </div>
+                <Droppable droppableId="templates" isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
+                  {(provided: any, snapshot: any) => (
+                    <div 
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="space-y-2 p-1"
+                    >
+                      {templateTasks.filter(task => task && task.id).map((task, index) => (
+                        <Draggable key={getSafeDraggableId('template', task.id)} draggableId={getSafeDraggableId('template', task.id)} index={index}>
+                          {(provided: any, snapshot: any) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
+                            >
+                              {snapshot.isDragging && (
+                                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
+                                  拖拽到时间段
+                                </div>
+                              )}
+                              <div className="font-semibold">{task.title}</div>
+                              <div className="text-xs text-text-secondary">
+                                Rewards: {task.reward_points}
                               </div>
-                            )}
-                            <div className="font-semibold">{task.title}</div>
-                            <div className="text-xs text-text-secondary">
-                              Rewards: {task.reward_points}
                             </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </div>
-            
-            {/* 添加一些辅助说明，帮助理解拖拽操作 */}
-            <div className="bg-bg-panel p-2 mt-2 rounded text-xs text-center opacity-70">
-              <p>将任务拖放到上午、下午或晚上时间块中</p>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
             </div>
           </div>
         </div>
@@ -799,7 +1184,7 @@ const TodayView = () => {
           </div>
           
           {/* 标签页内容 */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto hide-scrollbar">
             {activeTab === 'history' ? renderHistoryTab() : renderNotesTab()}
           </div>
         </div>
