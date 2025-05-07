@@ -15,9 +15,9 @@ interface AppHeaderProps {
 
 const AppHeader = ({ tabs, activeTab, onTabChange }: AppHeaderProps) => {
   return (
-    <header>
-      <nav>
-        <ul className="flex gap-6">
+    <header className="w-full">
+      <nav className="flex justify-center">
+        <ul className="flex gap-6 justify-center">
           {tabs.map((tab) => (
             <li key={tab.id}>
               <motion.button

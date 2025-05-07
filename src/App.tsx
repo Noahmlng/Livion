@@ -79,18 +79,21 @@ function MainApp() {
           <ValhallaTaskProvider>
             <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col">
               <div className="container mx-auto px-4 py-6 flex-shrink-0">
-                <div className="flex justify-between items-center mb-4">
-                <AppHeader 
-                  tabs={TABS} 
-                  activeTab={activeTab} 
-                  onTabChange={setActiveTab} 
-                />
+                <div className="relative mb-4">
+                  <div className="flex justify-center">
+                    <AppHeader 
+                      tabs={TABS} 
+                      activeTab={activeTab} 
+                      onTabChange={setActiveTab} 
+                    />
+                  </div>
+                  
                   <button 
                     onClick={() => {
                       signOutUser();
                       setShowLogin(true);
                     }}
-                    className="px-4 py-2 bg-bg-panel border border-border-metal text-text-primary rounded-md hover:bg-sidebar-item-hover-bg"
+                    className="absolute right-0 top-0 px-4 py-2 bg-bg-panel border border-border-metal text-text-primary rounded-md hover:bg-sidebar-item-hover-bg"
                   >
                     登出
                   </button>
