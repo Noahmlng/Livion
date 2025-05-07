@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // 确保提供有效的默认URL和Key
 // 使用明确的硬编码值作为后备，确保URL始终有效
@@ -28,7 +28,7 @@ console.log('[Supabase Config] URL:', supabaseUrl);
 console.log('[Supabase Config] Using fallback:', supabaseUrl === FALLBACK_URL);
 
 // 创建 Supabase 客户端
-let supabase;
+let supabase: SupabaseClient;
 try {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
   console.log('[Supabase Config] Client created successfully');
