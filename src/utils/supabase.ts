@@ -1,9 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import envConfig from '../../env.config';
 
-// 确保提供有效的默认URL和Key
-// 使用明确的硬编码值作为后备，确保URL始终有效
-const FALLBACK_URL = 'https://rnkgkrwzwfaztwdgjfzz.supabase.co';
-const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJua2drcnd6d2ZhenR3ZGdqZnp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTUwNTU2ODksImV4cCI6MjAzMDYzMTY4OX0.IyhdSB-yp8LD15rvpyJXb7r0NOF6vmvPO02u3yBZFJY';
+// 使用环境配置文件中的值作为后备
+const FALLBACK_URL = envConfig.supabase.url;
+const FALLBACK_KEY = envConfig.supabase.anonKey;
 
 // 使用try-catch确保即使环境变量有问题也能使用后备值
 let supabaseUrl, supabaseAnonKey;
