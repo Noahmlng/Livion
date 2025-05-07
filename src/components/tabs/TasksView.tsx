@@ -177,7 +177,7 @@ const TasksView = () => {
       <div className="flex gap-6 flex-1 overflow-hidden">
         {/* Left Column - Task List */}
         <div className="w-64 valhalla-panel overflow-auto">
-          <h3 className="font-display text-xl text-accent-gold mb-4 pb-2 border-b border-border-metal">
+          <h3 className="font-display text-xl text-text-primary mb-4 pb-2 border-b border-border-metal">
             Challenges
           </h3>
           
@@ -190,8 +190,8 @@ const TasksView = () => {
                 onClick={() => setSelectedTask(task)}
                 className={`p-3 cursor-pointer ${
                   selectedTask?.id === task.id 
-                    ? 'bg-bg-panel text-accent-gold border-l-2 border-accent-gold'
-                    : 'hover:bg-bg-panel'
+                    ? 'bg-accent-gold text-text-on-accent'
+                    : 'hover:bg-sidebar-item-hover-bg'
                 } ${task.completed ? 'line-through opacity-60' : ''}`}
               >
                 <div className="flex justify-between items-center mb-1">
@@ -210,7 +210,7 @@ const TasksView = () => {
                     ))}
                   </div>
                 </div>
-                <div className="text-sm text-wheat-300">
+                <div className="text-sm text-text-secondary">
                   Rewards: {task.reward_points}
                 </div>
               </motion.div>
@@ -255,7 +255,7 @@ const TasksView = () => {
                     </h2>
                   ) : (
                     <h2 
-                      className="text-2xl font-display text-accent-gold cursor-pointer"
+                      className="text-2xl font-display text-text-primary cursor-pointer"
                       onClick={() => {
                         startEditingTitle();
                       }}
@@ -338,7 +338,7 @@ const TasksView = () => {
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="px-4 py-2 bg-transparent text-red-800 border border-red-800 font-display uppercase tracking-wider text-sm rounded-md"
+                        className="px-4 py-2 bg-transparent text-red-500 border border-red-500 font-display uppercase tracking-wider text-sm rounded-md"
                         onClick={confirmDelete}
                       >
                         删除
@@ -348,7 +348,7 @@ const TasksView = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-transparent text-emerald-500 border border-emerald-500 font-display tracking-wider text-sm rounded-md"
+                          className="px-4 py-2 bg-accent-gold text-text-on-accent font-display tracking-wider text-sm rounded-md"
                           onClick={completeTask}
                         >
                           恢复任务
@@ -357,7 +357,7 @@ const TasksView = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-emerald-600 text-white font-display tracking-wider text-sm rounded-md shadow-md"
+                          className="px-4 py-2 bg-accent-gold text-text-on-accent font-display tracking-wider text-sm rounded-md shadow-md"
                           onClick={completeTask}
                         >
                           完成任务
@@ -368,7 +368,7 @@ const TasksView = () => {
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="px-4 py-2 bg-red-800/90 text-white font-display uppercase tracking-wider text-sm rounded-md"
+                      className="px-4 py-2 bg-red-600 text-white font-display uppercase tracking-wider text-sm rounded-md"
                       onClick={handleDelete}
                     >
                       Confirm Delete

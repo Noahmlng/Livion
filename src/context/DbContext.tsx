@@ -1,28 +1,32 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import * as api from '../db/api';
-import { generateId } from '../db';
-
-// Mock user for development
-const MOCK_USER_ID = 'user_1';
+import { useAuth } from './AuthContext';
+import { 
+  taskService, 
+  scheduleService, 
+  noteService, 
+  Task, 
+  ScheduleEntry, 
+  Note 
+} from '../utils/database';
 
 interface DbContextType {
-  userId: string;
+  userId: string | null;
   // Tasks
-  tasks: any[];
+  tasks: Task[];
   loadTasks: (category?: string) => Promise<void>;
-  createTask: (data: any) => Promise<any>;
-  updateTask: (taskId: string, data: any) => Promise<boolean>;
+  createTask: (data: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => Promise<Task | null>;
+  updateTask: (taskId: string, data: Partial<Task>) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   // Schedule entries
-  scheduleEntries: any[];
+  scheduleEntries: ScheduleEntry[];
   loadScheduleEntries: (date?: Date) => Promise<void>;
-  createScheduleEntry: (data: any) => Promise<any>;
-  updateScheduleEntry: (entryId: string, data: any) => Promise<boolean>;
+  createScheduleEntry: (data: Omit<ScheduleEntry, 'id' | 'created_at' | 'completed' | 'user_id'>) => Promise<ScheduleEntry | null>;
+  updateScheduleEntry: (entryId: string, data: Partial<ScheduleEntry>) => Promise<boolean>;
   deleteScheduleEntry: (entryId: string) => Promise<boolean>;
   // Notes
-  notes: any[];
+  notes: Note[];
   loadNotes: () => Promise<void>;
-  createNote: (content: string) => Promise<any>;
+  createNote: (content: string) => Promise<Note | null>;
   updateNote: (noteId: string, content: string) => Promise<boolean>;
   deleteNote: (noteId: string) => Promise<boolean>;
   // Loading state
@@ -32,14 +36,17 @@ interface DbContextType {
 const DbContext = createContext<DbContextType | undefined>(undefined);
 
 export function DbProvider({ children }: { children: ReactNode }) {
-  const [userId] = useState<string>(MOCK_USER_ID);
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [scheduleEntries, setScheduleEntries] = useState<any[]>([]);
-  const [notes, setNotes] = useState<any[]>([]);
+  const { user } = useAuth();
+  const userId = user?.id || null;
+  
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Initialize with some data when the app starts
+  // Initialize with data when user changes
   useEffect(() => {
+    if (userId) {
     const initializeData = async () => {
       await loadTasks();
       await loadScheduleEntries();
@@ -47,13 +54,26 @@ export function DbProvider({ children }: { children: ReactNode }) {
     };
 
     initializeData();
-  }, []);
+    } else {
+      // Clear data when user logs out
+      setTasks([]);
+      setScheduleEntries([]);
+      setNotes([]);
+    }
+  }, [userId]);
 
   // Task functions
   const loadTasks = async (category?: string) => {
+    if (!userId) return;
+    
     setLoading(true);
     try {
-      const result = await api.getTasks(userId, category);
+      let result: Task[];
+      if (category) {
+        result = await taskService.getByCategory(category, userId);
+      } else {
+        result = await taskService.getAll(userId);
+      }
       setTasks(result);
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -62,13 +82,12 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createTask = async (data: any) => {
+  const createTask = async (data: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => {
+    if (!userId) return null;
+    
     setLoading(true);
     try {
-      const result = await api.createTask({
-        ...data,
-        user_id: userId,
-      });
+      const result = await taskService.create(data, userId);
       await loadTasks();
       return result;
     } catch (error) {
@@ -79,12 +98,14 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateTask = async (taskId: string, data: any) => {
+  const updateTask = async (taskId: string, data: Partial<Task>) => {
+    if (!userId) return false;
+    
     setLoading(true);
     try {
-      const result = await api.updateTask(taskId, data);
+      await taskService.update(taskId, data, userId);
       await loadTasks();
-      return result;
+      return true;
     } catch (error) {
       console.error('Error updating task:', error);
       return false;
@@ -94,11 +115,13 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteTask = async (taskId: string) => {
+    if (!userId) return false;
+    
     setLoading(true);
     try {
-      const result = await api.deleteTask(taskId);
+      await taskService.delete(taskId, userId);
       await loadTasks();
-      return result;
+      return true;
     } catch (error) {
       console.error('Error deleting task:', error);
       return false;
@@ -109,9 +132,11 @@ export function DbProvider({ children }: { children: ReactNode }) {
 
   // Schedule entry functions
   const loadScheduleEntries = async (date?: Date) => {
+    if (!userId) return;
+    
     setLoading(true);
     try {
-      const result = await api.getScheduleEntries(userId, date);
+      const result = await scheduleService.getByDate(date || new Date(), userId);
       setScheduleEntries(result);
     } catch (error) {
       console.error('Error loading schedule entries:', error);
@@ -120,13 +145,12 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createScheduleEntry = async (data: any) => {
+  const createScheduleEntry = async (data: Omit<ScheduleEntry, 'id' | 'created_at' | 'completed' | 'user_id'>) => {
+    if (!userId) return null;
+    
     setLoading(true);
     try {
-      const result = await api.createScheduleEntry({
-        ...data,
-        user_id: userId,
-      });
+      const result = await scheduleService.create(data, userId);
       await loadScheduleEntries();
       return result;
     } catch (error) {
@@ -137,12 +161,14 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateScheduleEntry = async (entryId: string, data: any) => {
+  const updateScheduleEntry = async (entryId: string, data: Partial<ScheduleEntry>) => {
+    if (!userId) return false;
+    
     setLoading(true);
     try {
-      const result = await api.updateScheduleEntry(entryId, data);
+      await scheduleService.update(entryId, data, userId);
       await loadScheduleEntries();
-      return result;
+      return true;
     } catch (error) {
       console.error('Error updating schedule entry:', error);
       return false;
@@ -152,11 +178,13 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteScheduleEntry = async (entryId: string) => {
+    if (!userId) return false;
+    
     setLoading(true);
     try {
-      const result = await api.deleteScheduleEntry(entryId);
+      await scheduleService.delete(entryId, userId);
       await loadScheduleEntries();
-      return result;
+      return true;
     } catch (error) {
       console.error('Error deleting schedule entry:', error);
       return false;
@@ -167,9 +195,11 @@ export function DbProvider({ children }: { children: ReactNode }) {
 
   // Note functions
   const loadNotes = async () => {
+    if (!userId) return;
+    
     setLoading(true);
     try {
-      const result = await api.getNotes(userId);
+      const result = await noteService.getAll(userId);
       setNotes(result);
     } catch (error) {
       console.error('Error loading notes:', error);
@@ -179,12 +209,15 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const createNote = async (content: string) => {
+    if (!userId) return null;
+    
     setLoading(true);
     try {
-      const result = await api.createNote({
-        user_id: userId,
+      const newNote = {
         content,
-      });
+        createdAt: new Date()
+      };
+      const result = await noteService.create(newNote, userId);
       await loadNotes();
       return result;
     } catch (error) {
@@ -196,11 +229,13 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const updateNote = async (noteId: string, content: string) => {
+    if (!userId) return false;
+    
     setLoading(true);
     try {
-      const result = await api.updateNote(noteId, { content });
+      await noteService.update(noteId, content, userId);
       await loadNotes();
-      return result;
+      return true;
     } catch (error) {
       console.error('Error updating note:', error);
       return false;
@@ -210,11 +245,13 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteNote = async (noteId: string) => {
+    if (!userId) return false;
+    
     setLoading(true);
     try {
-      const result = await api.deleteNote(noteId);
+      await noteService.delete(noteId, userId);
       await loadNotes();
-      return result;
+      return true;
     } catch (error) {
       console.error('Error deleting note:', error);
       return false;

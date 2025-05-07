@@ -553,7 +553,7 @@ const TodayView = () => {
         className="flex-1 p-4"
         style={{ height: '350px' }}
       >
-        <h2 className="font-display text-xl text-accent-gold mb-4">历史任务记录</h2>
+        <h2 className="font-display text-xl text-text-primary mb-4">历史任务记录</h2>
         <div className="grid grid-cols-2 gap-4">
           {taskHistory.slice(0, visibleDays).map((day) => (
             <div key={day.date.toISOString()} className="valhalla-panel p-4">
@@ -695,7 +695,7 @@ const TodayView = () => {
           <div className="w-80 flex flex-col gap-4">
             {/* 支线任务列表 */}
             <div className="valhalla-panel overflow-auto flex-1">
-              <h3 className="font-display text-lg text-accent-gold mb-4 pb-2 border-b border-border-metal">
+              <h3 className="font-display text-lg text-text-primary mb-4 pb-2 border-b border-border-metal">
                 支线任务
               </h3>
               <Droppable droppableId="challenges" isDropDisabled={false}>
@@ -712,7 +712,7 @@ const TodayView = () => {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform`}
+                            className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
                           >
                             {snapshot.isDragging && (
                               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
@@ -720,7 +720,7 @@ const TodayView = () => {
                               </div>
                             )}
                             <div className="font-semibold">{task.title}</div>
-                            <div className="text-xs text-wheat-300">
+                            <div className="text-xs text-text-secondary">
                               Rewards: {task.reward_points}
                             </div>
                           </div>
@@ -735,7 +735,7 @@ const TodayView = () => {
             
             {/* 日常任务模板 */}
             <div className="valhalla-panel overflow-auto flex-1">
-              <h3 className="font-display text-lg text-accent-gold mb-4 pb-2 border-b border-border-metal">
+              <h3 className="font-display text-lg text-text-primary mb-4 pb-2 border-b border-border-metal">
                 日常任务
               </h3>
               <Droppable droppableId="templates" isDropDisabled={false}>
@@ -752,7 +752,7 @@ const TodayView = () => {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform`}
+                            className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
                           >
                             {snapshot.isDragging && (
                               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
@@ -760,7 +760,7 @@ const TodayView = () => {
                               </div>
                             )}
                             <div className="font-semibold">{task.title}</div>
-                            <div className="text-xs text-wheat-300">
+                            <div className="text-xs text-text-secondary">
                               Rewards: {task.reward_points}
                             </div>
                           </div>
@@ -785,13 +785,13 @@ const TodayView = () => {
           {/* 标签页切换 */}
           <div className="flex border-b border-border-metal">
             <button
-              className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'text-accent-gold border-b-2 border-accent-gold' : 'text-gray-400 hover:text-gray-300'}`}
+              className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
               onClick={() => setActiveTab('history')}
             >
               历史记录
             </button>
             <button
-              className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'text-accent-gold border-b-2 border-accent-gold' : 'text-gray-400 hover:text-gray-300'}`}
+              className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
               onClick={() => setActiveTab('notes')}
             >
               笔记

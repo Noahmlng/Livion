@@ -4,25 +4,28 @@
 
 @layer base {
   :root {
-    /* 英灵殿风格颜色 */
-    --v-bg-dark: #1B1B1F;
-    --v-bg-panel: #2E2E32;
-    --v-text-primary: #F5F5F3;
-    --v-text-secondary: #CFCAC2;
-    --v-accent-gold: #A17E4A;
-    --v-accent-copper: #8C3E2F;
-    --v-border-metal: #555353;
+    /* 新配色方案 */
+    --v-bg-dark: #1a1d21; /* Dark background */
+    --v-bg-panel: rgba(30, 33, 38, 0.85); /* Semi-transparent panel */
+    --v-text-primary: #ffffff; /* White text for dark backgrounds */
+    --v-text-secondary: #e0e0e0; /* Light gray text for secondary content */
+    --v-text-on-accent: #111111; /* Dark text for use on accent backgrounds */
+    --v-accent-gold: #00e0d8; /* Teal/Cyan highlight */
+    --v-border-metal: #4a4e54;
     
-    /* 新增颜色：宝石绿和小麦色 */
-    --v-emerald-400: #34d399;
-    --v-emerald-700: #047857;
-    --v-wheat-200: #f5deb3;
-    --v-wheat-300: #ebd8a0;
+    /* 新增和修改颜色 */
+    --v-emerald-400: #00e0d8;
+    --v-emerald-700: #008f8a;
+    --v-wheat-200: #e0e0e0;
+    --v-wheat-300: #c0c0c0;
+    --v-sidebar-item-hover-bg: rgba(255, 255, 255, 0.1);
+    --v-sidebar-active-bg: var(--v-accent-gold);
+    --v-sidebar-active-text: #111111;
 
     /* 字体 */
-    --font-display: "Cinzel", serif;
-    --font-body: "Noto Sans", sans-serif;
-    --font-symbol: "Uncial Antiqua", cursive;
+    --font-display: 'Noto Sans SC', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-body: 'Noto Sans SC', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-symbol: 'Noto Sans SC', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 
     /* 间距（4px 栅格） */
     --space-1: 4px;
@@ -65,7 +68,7 @@
   }
 
   .valhalla-tab.active {
-    @apply text-accent-gold border-b-2 border-accent-gold;
+    @apply text-text-on-accent bg-accent-gold rounded-t-md;
   }
 
   /* 按钮样式 */
@@ -75,22 +78,22 @@
   }
 
   .valhalla-btn:hover {
-    @apply border-accent-gold text-accent-gold;
+    @apply border-accent-gold bg-sidebar-item-hover-bg;
   }
 
   .valhalla-btn-primary {
-    @apply bg-accent-gold text-v-bg-dark border-accent-gold;
+    @apply bg-accent-gold text-text-on-accent border-accent-gold;
   }
 
   /* 任务项目 */
   .valhalla-task-item {
     @apply bg-bg-panel border border-border-metal rounded-sm p-3 mb-2 
-           hover:border-accent-gold transition-all duration-fast;
+           hover:border-accent-gold hover:bg-sidebar-item-hover-bg transition-all duration-fast;
   }
 
   /* 任务类别标题 */
   .valhalla-category-title {
-    @apply font-display text-accent-gold uppercase tracking-wider text-lg mb-3 
+    @apply font-display text-text-primary uppercase tracking-wider text-lg mb-3 
            border-b border-border-metal pb-2;
   }
 

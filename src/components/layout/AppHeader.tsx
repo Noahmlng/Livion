@@ -15,8 +15,8 @@ interface AppHeaderProps {
 
 const AppHeader = ({ tabs, activeTab, onTabChange }: AppHeaderProps) => {
   return (
-    <header className="border-b border-border-metal pb-4">
-      <nav className="flex justify-center">
+    <header>
+      <nav>
         <ul className="flex gap-6">
           {tabs.map((tab) => (
             <li key={tab.id}>
@@ -26,8 +26,8 @@ const AppHeader = ({ tabs, activeTab, onTabChange }: AppHeaderProps) => {
                 onClick={() => onTabChange(tab.id)}
                 className={`px-6 py-2 font-display uppercase tracking-wider text-lg ${
                   activeTab === tab.id 
-                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
-                    : 'text-wheat-300 hover:text-wheat-200'
+                    ? 'text-text-on-accent bg-accent-gold rounded-t-md' 
+                    : 'text-text-primary hover:bg-sidebar-item-hover-bg'
                 }`}
               >
                 <span>{tab.label}</span>

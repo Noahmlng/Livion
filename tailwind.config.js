@@ -14,10 +14,10 @@ export default {
         text: {
           primary: 'var(--v-text-primary)',
           secondary: 'var(--v-text-secondary)',
+          'on-accent': 'var(--v-text-on-accent)',
         },
         accent: {
           gold: 'var(--v-accent-gold)',
-          copper: 'var(--v-accent-copper)',
         },
         border: {
           metal: 'var(--v-border-metal)',
@@ -30,11 +30,16 @@ export default {
           200: 'var(--v-wheat-200)',
           300: 'var(--v-wheat-300)',
         },
+        sidebar: {
+          'item-hover-bg': 'var(--v-sidebar-item-hover-bg)',
+          'active-bg': 'var(--v-sidebar-active-bg)',
+          'active-text': 'var(--v-sidebar-active-text)',
+        },
       },
       fontFamily: {
-        display: ['Cinzel', 'serif'],
-        body: ['Noto Sans', 'sans-serif'],
-        symbol: ['Uncial Antiqua', 'cursive'],
+        display: ['Noto Sans SC', 'Segoe UI', 'sans-serif'],
+        body: ['Noto Sans SC', 'Segoe UI', 'sans-serif'],
+        symbol: ['Noto Sans SC', 'Segoe UI', 'sans-serif'],
       },
       spacing: {
         1: 'var(--space-1)',
