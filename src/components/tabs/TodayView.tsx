@@ -105,7 +105,7 @@ const TodayView = () => {
   // 下方标签页状态
   const [activeTab, setActiveTab] = useState<'history' | 'notes'>('history');
   const [taskHistory, setTaskHistory] = useState<TaskHistoryDay[]>([]);
-  const [visibleDays, setVisibleDays] = useState(7);
+  const [visibleDays, setVisibleDays] = useState(8); // 从昨天开始的 7 天 + 1
   const [notesState, setNotesState] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -206,7 +206,7 @@ const TodayView = () => {
   };
   
   // 新增方法: 从数据库加载历史任务记录
-  const loadHistoryData = async (daysToLoad = 7, startFromDay = 0) => {
+  const loadHistoryData = async (daysToLoad = 7, startFromDay = 1) => {
     setLoading(true);
     
     try {
@@ -217,7 +217,7 @@ const TodayView = () => {
       // 处理每一天的数据
       const newHistoryData: TaskHistoryDay[] = [];
       
-      // 遍历日期范围
+      // 遍历日期范围，从昨天开始（i 从 startFromDay 开始，默认为 1，表示昨天）
       for (let i = startFromDay; i < startFromDay + daysToLoad; i++) {
         // 计算北京时间的日期
         const beijingDate = new Date(beijingNow);
@@ -267,7 +267,7 @@ const TodayView = () => {
       }
       
       // 将新加载的历史数据添加到现有数据后面
-      if (startFromDay === 0) {
+      if (startFromDay === 1) {
         setTaskHistory(newHistoryData);
       } else {
         setTaskHistory(prevHistory => [...prevHistory, ...newHistoryData]);
@@ -281,6 +281,7 @@ const TodayView = () => {
   
   // 添加加载更多历史数据的方法
   const loadMoreHistory = () => {
+    // 从当前可见天数开始加载更多（visibleDays 已经包含了偏移）
     loadHistoryData(7, visibleDays);
     setVisibleDays(prev => prev + 7);
   };
@@ -313,14 +314,14 @@ const TodayView = () => {
       if (historyContainerRef.current) {
         const { scrollTop, scrollHeight, clientHeight } = historyContainerRef.current;
         // 当滚动到接近底部时，加载更多数据
-        if (scrollTop + clientHeight >= scrollHeight - 100) {
+        if (scrollTop + clientHeight >= scrollHeight - 50 && !loading) {
           loadMoreHistory();
         }
       }
     };
     
     const container = historyContainerRef.current;
-    if (container) {
+    if (container && activeTab === 'history') {
       container.addEventListener('scroll', handleScroll);
     }
     
@@ -329,7 +330,7 @@ const TodayView = () => {
         container.removeEventListener('scroll', handleScroll);
       }
     };
-  }, [taskHistory]);
+  }, [taskHistory, loading, activeTab]);
   
   // 加载笔记数据
   const loadNotesData = async (page = 1, reset = true) => {
@@ -799,7 +800,6 @@ const TodayView = () => {
         <div 
           ref={historyContainerRef}
           className="flex-1 p-4 hide-scrollbar flex items-center justify-center"
-          style={{ height: '350px' }}
         >
           <div className="text-center">
             <p className="text-text-secondary text-lg">暂无历史任务记录</p>
@@ -812,10 +812,8 @@ const TodayView = () => {
       <div 
         ref={historyContainerRef}
         className="flex-1 p-4 hide-scrollbar"
-        style={{ height: '350px' }}
       >
-        <h2 className="font-display text-xl text-text-primary mb-4">历史任务记录</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 pb-4">
           {taskHistory.map((day) => (
             <div key={day.date.toISOString()} className="valhalla-panel p-4">
               <h3 className="font-medium text-accent-gold mb-3">{day.formattedDate}</h3>
@@ -859,7 +857,6 @@ const TodayView = () => {
     return (
       <div 
         className="flex flex-col p-4"
-        style={{ height: '350px' }}
       >
         {/* 新建笔记区域 - 简化版 */}
         <div className="mb-4">
@@ -888,6 +885,7 @@ const TodayView = () => {
         <div 
           ref={noteContainerRef}
           className="overflow-y-auto flex-1 hide-scrollbar space-y-3"
+          style={{ minHeight: '100px' }}
         >
           {notesState.map((note) => (
             <div
@@ -1219,7 +1217,7 @@ const TodayView = () => {
         </div>
         
         {/* 下方历史和笔记标签页 */}
-        <div className="valhalla-panel overflow-hidden mt-2 min-h-[500px]">
+        <div className="valhalla-panel overflow-hidden mt-2 flex flex-col">
           {/* 标签页切换 */}
           <div className="flex border-b border-border-metal">
             <button
@@ -1237,7 +1235,7 @@ const TodayView = () => {
           </div>
           
           {/* 标签页内容 */}
-          <div className="flex-1 overflow-auto hide-scrollbar">
+          <div className="flex-1 overflow-auto hide-scrollbar h-full" style={{ minHeight: '450px' }}>
             {activeTab === 'history' ? renderHistoryTab() : renderNotesTab()}
           </div>
         </div>
