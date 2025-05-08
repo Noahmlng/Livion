@@ -1,31 +1,31 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import envConfig from '../../env.config';
 
-// 使用环境配置文件中的值作为后备
-const FALLBACK_URL = envConfig.supabase.url;
-const FALLBACK_KEY = envConfig.supabase.anonKey;
-
-// 使用try-catch确保即使环境变量有问题也能使用后备值
-let supabaseUrl, supabaseAnonKey;
+// 从环境变量获取Supabase配置
+// 注意：请在部署环境中正确设置这些环境变量
+let supabaseUrl: string, supabaseAnonKey: string;
 
 try {
-  // 尝试从环境变量获取值，如果获取失败则使用后备值
-  supabaseUrl = (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== 'undefined' && import.meta.env.VITE_SUPABASE_URL.startsWith('http')) 
-    ? import.meta.env.VITE_SUPABASE_URL 
-    : FALLBACK_URL;
+  // 尝试从环境变量获取值
+  supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   
-  supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY && import.meta.env.VITE_SUPABASE_ANON_KEY !== 'undefined')
-    ? import.meta.env.VITE_SUPABASE_ANON_KEY
-    : FALLBACK_KEY;
+  // 防御性检查 - 避免使用无效值
+  if (!supabaseUrl || supabaseUrl === 'undefined' || !supabaseUrl.startsWith('http')) {
+    console.error('[Supabase Config] Invalid or missing URL in environment variables');
+    throw new Error('无效的Supabase URL配置');
+  }
+  
+  if (!supabaseAnonKey || supabaseAnonKey === 'undefined') {
+    console.error('[Supabase Config] Invalid or missing key in environment variables');
+    throw new Error('无效的Supabase Key配置');
+  }
 } catch (error) {
-  console.error('Error accessing environment variables, using fallback values:', error);
-  supabaseUrl = FALLBACK_URL;
-  supabaseAnonKey = FALLBACK_KEY;
+  console.error('[Supabase Config] Error accessing environment variables:', error);
+  throw new Error('Supabase环境配置错误，请正确设置环境变量');
 }
 
-// 输出值以便调试
-console.log('[Supabase Config] URL:', supabaseUrl);
-console.log('[Supabase Config] Using fallback:', supabaseUrl === FALLBACK_URL);
+// 输出信息以便调试（不含敏感信息）
+console.log('[Supabase Config] 环境变量加载成功');
 
 // 创建 Supabase 客户端
 let supabase: SupabaseClient;
@@ -33,9 +33,8 @@ try {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
   console.log('[Supabase Config] Client created successfully');
 } catch (error) {
-  console.error('[Supabase Config] Error creating client, trying with fallback values:', error);
-  // 如果创建失败，使用后备值再次尝试
-  supabase = createClient(FALLBACK_URL, FALLBACK_KEY);
+  console.error('[Supabase Config] Error creating client:', error);
+  throw new Error('Supabase客户端创建失败');
 }
 
 export default supabase; 
