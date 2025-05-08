@@ -181,7 +181,12 @@ export function DbProvider({ children }: { children: ReactNode }) {
       
       // 首先尝试使用 supabaseApi
       try {
-        console.log(`Trying supabaseApi for schedules range from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+        // 确保开始日期和结束日期格式正确 (YYYY-MM-DD)
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        console.log(`正在加载日期范围: ${startDateStr} 到 ${endDateStr}`);
+        
         // 将 userId 转换为数字
         const userIdNum = parseInt(userId);
         if (isNaN(userIdNum)) {
@@ -190,7 +195,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         
         // 使用 Supabase API 获取日期范围内的数据
         const supabaseEntries = await supabaseApi.schedules.getByDateRange(startDate, endDate, userIdNum);
-        console.log('Supabase schedule entries for date range:', supabaseEntries);
+        console.log('日期范围查询结果:', supabaseEntries);
         
         // 转换为本地格式并按日期分组
         const convertedEntries = convertSupabaseEntries(supabaseEntries);
@@ -242,6 +247,40 @@ export function DbProvider({ children }: { children: ReactNode }) {
     
     setLoading(true);
     try {
+      // 日期格式验证与矫正
+      let sanitizedDate = data.scheduled_date || data.date;
+      
+      // 日志记录原始日期值
+      console.log('原始日期输入:', sanitizedDate, typeof sanitizedDate);
+      
+      // 如果日期是Date对象，转换为YYYY-MM-DD格式字符串
+      if (sanitizedDate instanceof Date) {
+        sanitizedDate = sanitizedDate.toISOString().split('T')[0];
+      } else if (typeof sanitizedDate === 'string') {
+        // 如果是字符串，确保是YYYY-MM-DD格式
+        if (sanitizedDate.includes('T')) {
+          sanitizedDate = sanitizedDate.split('T')[0];
+        }
+        // 确保日期格式有效
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(sanitizedDate)) {
+          console.warn('日期格式无效，使用今天的日期:', sanitizedDate);
+          sanitizedDate = new Date().toISOString().split('T')[0];
+        }
+      } else {
+        // 如果日期无效，使用今天的日期
+        console.warn('无效日期，使用今天的日期');
+        sanitizedDate = new Date().toISOString().split('T')[0];
+      }
+      
+      console.log('处理后的日期:', sanitizedDate);
+      
+      // 更新数据中的日期
+      data = {
+        ...data,
+        scheduled_date: sanitizedDate,
+        date: sanitizedDate
+      };
+      
       // 首先尝试使用 supabaseApi
       try {
         console.log('Trying to create entry with supabaseApi...');
@@ -254,22 +293,21 @@ export function DbProvider({ children }: { children: ReactNode }) {
         // 将UI格式的数据转换为数据库格式
         // UI格式: { title, timeSlot, scheduled_date, source_type }
         // DB格式: { custom_name, slot, date, task_type }
-        const dbFormatEntry: Omit<ScheduleEntry, 'entry_id' | 'created_at' | 'user_id'> = {
+        const dbFormatEntry = {
           custom_name: data.title,
           slot: data.timeSlot,
-          date: data.scheduled_date,
+          date: sanitizedDate, // 使用处理后的日期
           task_type: data.source_type,
-          status: 'ongoing',
+          status: 'ongoing' as 'ongoing' | 'completed' | 'deleted',
           ref_task_id: data.task_id ? parseInt(data.task_id) : undefined,
           ref_template_id: data.template_id ? parseInt(data.template_id) : undefined,
           custom_desc: '',
-          reward_points: 0,
-          user_id: userIdNum
+          reward_points: 0
         };
         
         // 准备数据并转换为 Supabase 格式
         const localEntry: ScheduleEntry = {
-          entry_id: 0, // 临时 ID
+          entry_id: 0, // Will be removed by localToSupabaseEntry
           user_id: userIdNum,
           date: dbFormatEntry.date,
           slot: dbFormatEntry.slot,
@@ -282,7 +320,14 @@ export function DbProvider({ children }: { children: ReactNode }) {
           reward_points: dbFormatEntry.reward_points
         };
         
+        // 转换为 Supabase 格式 (不包含 entry_id)
         const supabaseEntry = localToSupabaseEntry(localEntry);
+        
+        console.log('数据转换过程:');
+        console.log('- 原始UI数据:', data);
+        console.log('- 转换为DB格式:', dbFormatEntry);
+        console.log('- 本地格式化:', localEntry);
+        console.log('- 发送到Supabase前:', supabaseEntry);
         
         // 使用 Supabase API 创建数据
         const result = await supabaseApi.schedules.create(supabaseEntry);
@@ -314,16 +359,19 @@ export function DbProvider({ children }: { children: ReactNode }) {
       }
       
       // 回退到本地数据库 - 转换为本地数据库格式
+      // 确保不包含 entry_id，让数据库自动生成
       const dbFormatEntry = {
-        date: data.scheduled_date,
+        date: sanitizedDate, // 使用处理后的日期
         slot: data.timeSlot,
         task_type: data.source_type,
-        status: 'ongoing',
+        status: 'ongoing' as 'ongoing' | 'completed' | 'deleted',
         custom_name: data.title,
         custom_desc: '',
         reward_points: 0,
         user_id: parseInt(userId)
       };
+      
+      console.log('回退到本地数据库，最终数据:', dbFormatEntry);
       
       const result = await scheduleService.create(dbFormatEntry, userId);
       await loadScheduleEntries();
@@ -418,18 +466,8 @@ export function DbProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const result = await noteService.getAll(userId);
-      // 确保处理created_at和createdAt的差异
-      const processedNotes = result.map(note => {
-        // 如果note中有created_at但没有createdAt，则添加createdAt
-        if (note.created_at && !note.createdAt) {
-          return {
-            ...note,
-            createdAt: new Date(note.created_at)
-          };
-        }
-        return note;
-      });
-      setNotes(processedNotes);
+      // 处理notes并加载到状态中
+      setNotes(result);
     } catch (error) {
       console.error('Error loading notes:', error);
     } finally {

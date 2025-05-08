@@ -3,11 +3,20 @@ import { User, Task, ScheduleEntry, Note, TaskTemplate, Goal } from '../types/su
 
 /**
  * 格式化日期为 YYYY-MM-DD 字符串
+ * 由于我们存储 UTC 时间但展示北京时间 (UTC+8)，
+ * 这个函数确保日期正确转换为数据库格式
  */
 const formatDate = (date: Date | string): string => {
   if (typeof date === 'string') {
-    return date.split('T')[0]; // 如果已经是字符串，确保只取日期部分
+    // 如果已经是字符串且符合 YYYY-MM-DD 格式，直接返回
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
+    // 如果是ISO格式字符串，解析为Date对象再处理
+    return new Date(date).toISOString().split('T')[0];
   }
+  
+  // 对于Date对象，直接使用 ISO 格式并提取日期部分
   return date.toISOString().split('T')[0];
 };
 
@@ -234,13 +243,18 @@ export const supabaseApi = {
      * 创建新的日程安排
      */
     async create(entry: Omit<ScheduleEntry, 'entry_id' | 'created_at'>): Promise<ScheduleEntry> {
-      console.log('Creating schedule entry:', entry);
+      console.log('Creating schedule entry - 原始数据:', JSON.stringify(entry, null, 2));
+      console.log('Date value before formatting:', entry.date, 'Type:', typeof entry.date);
       
-      // 确保日期格式正确
+      // 确保日期格式正确 & 移除entry_id字段，让数据库自动生成
+      const { entry_id, ...entryWithoutId } = entry as any;
       const entryToInsert = {
-        ...entry,
-        date: formatDate(entry.date)
+        ...entryWithoutId,
+        date: formatDate(entryWithoutId.date)
       };
+      
+      console.log('Formatted date for database:', entryToInsert.date);
+      console.log('Final data to insert into database (without entry_id):', JSON.stringify(entryToInsert, null, 2));
       
       const { data, error } = await supabase
         .from('schedule_entries')
@@ -252,6 +266,8 @@ export const supabaseApi = {
         console.error('Error creating schedule entry:', error);
         throw error;
       }
+      
+      console.log('Entry created in database with data:', JSON.stringify(data, null, 2));
       
       return data;
     },

@@ -24,11 +24,16 @@ export function supabaseToLocalEntry(entry: SupabaseScheduleEntry): DbScheduleEn
 /**
  * 将本地 DbScheduleEntry 转换为 Supabase ScheduleEntry
  */
-export function localToSupabaseEntry(entry: DbScheduleEntry): SupabaseScheduleEntry {
-  return {
-    entry_id: entry.entry_id || 0,
+export function localToSupabaseEntry(entry: DbScheduleEntry): Omit<SupabaseScheduleEntry, 'entry_id'> {
+  console.log('localToSupabaseEntry - 输入日期值:', entry.date, 'Type:', typeof entry.date);
+  
+  const formattedDate = formatDate(entry.date);
+  console.log('localToSupabaseEntry - 格式化后日期值:', formattedDate);
+  
+  // 创建基本对象，不包含entry_id
+  const result: Omit<SupabaseScheduleEntry, 'entry_id'> = {
     user_id: entry.user_id,
-    date: formatDate(entry.date),
+    date: formattedDate,
     slot: entry.slot as TimeSlot,
     status: entry.status as TaskStatus,
     task_type: entry.task_type as TaskType,
@@ -39,6 +44,9 @@ export function localToSupabaseEntry(entry: DbScheduleEntry): SupabaseScheduleEn
     reward_points: entry.reward_points,
     created_at: entry.created_at || new Date().toISOString()
   };
+  
+  console.log('转换后的对象 (不含entry_id):', result);
+  return result;
 }
 
 /**
@@ -46,22 +54,35 @@ export function localToSupabaseEntry(entry: DbScheduleEntry): SupabaseScheduleEn
  * 处理各种可能的输入类型
  */
 function formatDate(date: Date | string | undefined): string {
+  console.log('formatDate - 输入值:', date, 'Type:', typeof date);
+  
   if (!date) {
     // 如果日期未定义，返回今天的日期
-    return new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    console.log('formatDate - 日期未定义，使用今天:', today);
+    return today;
   }
   
   if (typeof date === 'string') {
     // 如果已经是字符串格式
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      console.log('formatDate - 已经是YYYY-MM-DD格式:', date);
+      return date;
+    }
     if (date.includes('T')) {
       // 如果是ISO格式，提取日期部分
-      return date.split('T')[0];
+      const extractedDate = date.split('T')[0];
+      console.log('formatDate - 从ISO提取日期部分:', extractedDate);
+      return extractedDate;
     }
+    console.log('formatDate - 使用原始字符串:', date);
     return date; // 否则直接返回字符串
   }
   
   // 处理Date对象
-  return date.toISOString().split('T')[0];
+  const isoDate = date.toISOString().split('T')[0];
+  console.log('formatDate - 从Date对象转换:', isoDate, '原始Date:', date);
+  return isoDate;
 }
 
 /**
