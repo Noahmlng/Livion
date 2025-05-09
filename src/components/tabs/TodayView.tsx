@@ -6,7 +6,11 @@ import {
   DragDropContext, 
   Droppable, 
   Draggable,
-  resetServerContext
+  resetServerContext,
+  DroppableProvided,
+  DraggableProvided,
+  DroppableStateSnapshot,
+  DraggableStateSnapshot
 } from 'react-beautiful-dnd';
 import morningBg from '../../assets/morning-bg.jpg';
 import afternoonBg from '../../assets/afternoon-bg.jpg';
@@ -90,6 +94,11 @@ const TodayView = () => {
   
   // 状态
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
+  const [temporaryTaskOrder, setTemporaryTaskOrder] = useState<Record<TimeSlot, string[]>>({
+    morning: [],
+    afternoon: [],
+    evening: []
+  });
   const [newTaskText, setNewTaskText] = useState({ morning: '', afternoon: '', evening: '' });
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -121,7 +130,6 @@ const TodayView = () => {
   // Force a rerender of the DragDropContext on mount to fix initialization issues
   useEffect(() => {
     resetServerContext();
-    setForceUpdateKey(prev => prev + 1);
     
     // 加载今天的任务安排
     loadTodayScheduleEntries();
@@ -144,11 +152,6 @@ const TodayView = () => {
     const beijingMonth = String(beijingNow.getMonth() + 1).padStart(2, '0'); // 月份从0开始
     const beijingDay = String(beijingNow.getDate()).padStart(2, '0');
     const beijingDateStr = `${beijingYear}-${beijingMonth}-${beijingDay}`;
-    
-    console.log('加载日期范围:', 
-      `北京时间: ${beijingNow.toISOString()}`,
-      `北京日期字符串: ${beijingDateStr}`
-    );
     
     // 构造基于北京时间的日期（UTC+8）的开始和结束时间
     // 注意：我们在数据库中保存的是日期字符串（没有时区信息），所以直接使用北京时区的日期字符串
@@ -184,25 +187,28 @@ const TodayView = () => {
       return entryDateStr === beijingDateStr;
     });
     
-    // 手动更新scheduleEntries状态
-    if (todayEntries.length > 0) {
-      console.log('找到今日（北京时间）的任务:', todayEntries.length, todayEntries);
-      
-      // 将数据转换为UI格式并更新状态
-      const mappedTasks = todayEntries.map(entry => ({
-        id: entry.entry_id.toString(),
-        title: entry.custom_name || '',
-        timeSlot: entry.slot as TimeSlot,
-        sourceType: entry.task_type as 'challenge' | 'template' | 'custom',
-        sourceId: entry.ref_task_id?.toString() || entry.ref_template_id?.toString(),
-        completed: entry.status === 'completed'
-      }));
-      
-      setScheduledTasks(mappedTasks);
-    } else {
-      console.log('今日（北京时间）没有找到任务');
-      setScheduledTasks([]);
-    }
+    // 将数据转换为UI格式并更新状态
+    const mappedTasks = todayEntries.map(entry => ({
+      id: entry.entry_id.toString(),
+      title: entry.custom_name || '',
+      timeSlot: entry.slot as TimeSlot,
+      sourceType: entry.task_type as 'challenge' | 'template' | 'custom',
+      sourceId: entry.ref_task_id?.toString() || entry.ref_template_id?.toString(),
+      completed: entry.status === 'completed'
+    }));
+    
+    setScheduledTasks(mappedTasks);
+    
+    // 初始化临时排序状态
+    const morningTasks = mappedTasks.filter(task => task.timeSlot === 'morning').map(task => task.id);
+    const afternoonTasks = mappedTasks.filter(task => task.timeSlot === 'afternoon').map(task => task.id);
+    const eveningTasks = mappedTasks.filter(task => task.timeSlot === 'evening').map(task => task.id);
+    
+    setTemporaryTaskOrder({
+      morning: morningTasks,
+      afternoon: afternoonTasks,
+      evening: eveningTasks
+    });
   };
   
   // 新增方法: 从数据库加载历史任务记录
@@ -338,8 +344,13 @@ const TodayView = () => {
     setNotesLoading(true);
     
     try {
+      console.log('Exception: 开始加载笔记 - 当前页码:', page, '重置状态:', reset);
+      
       // 加载数据库中的笔记
       await loadNotes();
+      
+      console.log('Exception: 笔记已从数据库加载, 可用笔记数量:', notes.length);
+      console.log('Exception: 笔记数据样例:', notes.length > 0 ? JSON.stringify(notes[0]) : '无笔记');
       
       if (reset) {
         // 重置分页状态
@@ -347,17 +358,28 @@ const TodayView = () => {
         
         // 使用数据库中的笔记
         const dbNotes = notes.slice(0, 10).map(note => {
+          console.log('Exception: 处理单个笔记:', note);
           // 确保日期是有效的
           const createdTime = note.created_at ? new Date(note.created_at) : new Date();
-          return {
-            id: note.note_id.toString(),
-            content: note.content,
+          
+          // 创建UI需要的笔记对象格式
+          const uiNote: Note = {
+            id: String(note.note_id), // 强制转换为字符串
+            content: note.content || '',
             // 将UTC时间转换为北京时间
             createdAt: toBeijingTime(createdTime)
           };
+          
+          console.log('Exception: 转换后的笔记对象:', uiNote);
+          return uiNote;
         });
         
+        console.log('Exception: 重置后的笔记数量:', dbNotes.length);
+        console.log('Exception: 即将更新UI的笔记列表:', JSON.stringify(dbNotes));
+        
+        // 使用回调形式的setState来确保是最新状态
         setNotesState(dbNotes);
+        
         setHasMoreNotes(notes.length > 10);
       } else {
         // 加载更多笔记（分页）
@@ -366,22 +388,45 @@ const TodayView = () => {
           // 确保日期是有效的
           const createdTime = note.created_at ? new Date(note.created_at) : new Date();
           return {
-            id: note.note_id.toString(),
-            content: note.content,
+            id: String(note.note_id), // 强制转换为字符串
+            content: note.content || '',
             // 将UTC时间转换为北京时间
             createdAt: toBeijingTime(createdTime)
           };
         });
         
-        setNotesState(prevNotes => [...prevNotes, ...newNotes]);
+        console.log('Exception: 加载更多笔记 - 新增数量:', newNotes.length);
+        
+        setNotesState(prevNotes => {
+          const updatedNotes = [...prevNotes, ...newNotes];
+          console.log('Exception: 更新后的全部笔记数量:', updatedNotes.length);
+          return updatedNotes;
+        });
+        
         setHasMoreNotes(notes.length > startIndex + 10);
       }
     } catch (error) {
-      console.error('加载笔记失败:', error);
+      console.log('Exception: 加载笔记失败:', error);
     } finally {
       setNotesLoading(false);
     }
   };
+  
+  // 监听notesState变化
+  useEffect(() => {
+    console.log('Exception: notesState已更新, 当前笔记数量:', notesState.length);
+    console.log('Exception: 当前笔记内容:', JSON.stringify(notesState));
+  }, [notesState]);
+
+  // 监听activeTab变化
+  useEffect(() => {
+    console.log('Exception: activeTab已变更为:', activeTab);
+    if (activeTab === 'notes') {
+      console.log('Exception: 切换到笔记标签，当前笔记数量:', notesState.length);
+      // 每次切换到笔记标签页时，重新加载笔记
+      loadNotesData(1, true);
+    }
+  }, [activeTab]);
   
   // 加载更多笔记
   const loadMoreNotes = () => {
@@ -420,8 +465,12 @@ const TodayView = () => {
     if (!newNote.trim()) return;
     
     try {
+      console.log('Exception: 尝试创建新笔记');
+      
       // 创建新笔记到数据库
       const result = await createNote(newNote.trim());
+      
+      console.log('Exception: 创建笔记结果:', result);
       
       if (result) {
         // 确保日期是有效的
@@ -429,22 +478,26 @@ const TodayView = () => {
         
         // 添加到本地状态
         const newNoteObj: Note = {
-          id: result.note_id.toString(),
-          content: result.content,
+          id: String(result.note_id),
+          content: result.content || '',
           // 将UTC时间转换为北京时间
           createdAt: toBeijingTime(createdTime)
         };
         
-        console.log('创建新笔记:', 
+        console.log('Exception: 创建新笔记:', 
           `UTC时间: ${createdTime.toISOString()}`, 
-          `北京时间: ${newNoteObj.createdAt.toISOString()}`
+          `北京时间: ${newNoteObj.createdAt.toISOString()}`,
+          `笔记ID: ${newNoteObj.id}`,
+          `笔记内容: ${newNoteObj.content}`
         );
         
         setNotesState([newNoteObj, ...notesState]);
         setNewNote('');
+      } else {
+        console.log('Exception: 创建笔记失败，返回结果为空');
       }
     } catch (error) {
-      console.error('创建笔记失败:', error);
+      console.log('Exception: 创建笔记失败:', error);
     }
   };
   
@@ -665,35 +718,65 @@ const TodayView = () => {
     
     // 重新加载今天的任务
     await loadTodayScheduleEntries();
+    
+    // 后面执行完数据库创建后，也要更新临时排序状态
+    if (result) {
+      setTemporaryTaskOrder(prev => ({
+        ...prev,
+        [timeSlot]: [...prev[timeSlot], result.entry_id]
+      }));
+    }
   };
   
   // 删除任务
   const handleDeleteTask = async (taskId: string) => {
-    // 从本地状态中删除
-    setScheduledTasks(scheduledTasks.filter(t => t.id !== taskId));
+    // 先从临时排序中移除
+    setTemporaryTaskOrder(prev => {
+      const newOrder = { ...prev };
+      // 在所有时间段中查找并移除该任务ID
+      Object.keys(newOrder).forEach(slot => {
+        newOrder[slot as TimeSlot] = newOrder[slot as TimeSlot].filter(id => id !== taskId);
+      });
+      return newOrder;
+    });
     
-    // 从数据库中删除
+    // 然后从数据库中删除
     await deleteScheduleEntry(taskId);
+    // 重新加载数据
+    await loadTodayScheduleEntries();
   };
   
   // 将任务从一个时间段移动到另一个时间段
   const moveTaskBetweenSlots = async (taskId: string, newSlot: TimeSlot) => {
+    // 查找任务
+    const task = scheduledTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // 更新任务的时间段
+    const updatedTask = { ...task, timeSlot: newSlot };
+    
+    // 更新数据库
+    await updateScheduleEntry(taskId, { slot: newSlot });
+    
     // 更新本地状态
     setScheduledTasks(prev => 
-      prev.map(task => 
-        task.id === taskId 
-          ? { ...task, timeSlot: newSlot } 
-          : task
-      )
+      prev.map(t => t.id === taskId ? updatedTask : t)
     );
-    
-    // 更新数据库 - 使用正确的字段名
-    await updateScheduleEntry(taskId, { slot: newSlot });
   };
   
   // 渲染每个时间段的面板内容
   const renderSlot = (slot: TimeSlot) => {
-    const tasksInSlot = scheduledTasks.filter(task => task.timeSlot === slot);
+    const allTasksInSlot = scheduledTasks.filter(task => task.timeSlot === slot);
+    
+    // 根据临时排序状态获取任务
+    const orderedTasks = temporaryTaskOrder[slot]
+      .map(taskId => allTasksInSlot.find(task => task.id === taskId))
+      .filter(task => task !== undefined) as ScheduledTask[];
+    
+    // 确保所有任务都在显示（以防有新任务但临时状态未更新）
+    const unseenTasks = allTasksInSlot.filter(task => !temporaryTaskOrder[slot].includes(task.id));
+    const tasksInSlot = [...orderedTasks, ...unseenTasks];
+    
     return (
       <div key={slot} className="flex-1 flex items-stretch">
         {/* 左侧标题区域 */}
@@ -711,60 +794,96 @@ const TodayView = () => {
           onMouseLeave={() => setHoveredSlot(null)}
         >
           <div className="absolute inset-0 bg-black/60"></div>
+          
           <div className="relative flex-1 flex flex-col p-4 overflow-auto hide-scrollbar">
-            <Droppable droppableId={slot} direction="vertical" isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
+            <Droppable droppableId={slot} direction="vertical">
               {(provided: any, snapshot: any) => (
-                <div 
-                  ref={provided.innerRef} 
-                  {...provided.droppableProps} 
-                  className={`flex flex-col gap-2 flex-1 min-h-[120px] ${snapshot.isDraggingOver ? 'bg-accent-gold/10 border-2 border-dashed border-accent-gold/50 rounded-lg p-2' : ''}`}
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className={`flex flex-col gap-2 flex-1 min-h-[120px] ${
+                    snapshot.isDraggingOver ? 'bg-accent-gold/10 border-2 border-dashed border-accent-gold/50 rounded-lg p-2' : ''
+                  }`}
                 >
-                  {tasksInSlot.map((task, index) => (
-                    <Draggable key={task.id} draggableId={task.id} index={index}>
-                      {(provided: any, snapshot: any) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className={`flex items-center w-full p-3 ${snapshot.isDragging ? 'bg-bg-panel/90 shadow-lg' : 'bg-black/70'} border border-border-metal rounded`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="mr-2"
-                            checked={task.completed}
-                            onChange={() => toggleComplete(task.id)}
-                          />
-                          {editingTaskId === task.id ? (
-                            <input
-                              ref={editInputRef}
-                              type="text"
-                              className="flex-1 px-2 py-1 bg-bg-dark border border-border-metal rounded-md text-text-primary focus:outline-none focus:border-accent-gold"
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onKeyDown={handleEditKeyDown}
-                              onBlur={saveEditedTask}
-                            />
-                          ) : (
-                            <span 
-                              className={`${task.completed ? 'line-through text-gray-400' : 'text-white'} flex-1 cursor-pointer`}
-                              onClick={() => startEditing(task.id, task.title)}
+                  {tasksInSlot.map((task, index) => {
+                    // 确保每个任务有唯一的ID
+                    const uniqueTaskId = `task-${task.id}-${slot}`;
+                    
+                    return (
+                      <Draggable 
+                        key={uniqueTaskId} 
+                        draggableId={uniqueTaskId} 
+                        index={index}
+                      >
+                        {(provided: any, snapshot: any) => {
+                          return (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`
+                                group relative flex items-center w-full p-3 
+                                ${snapshot.isDragging ? 'bg-bg-panel/90 shadow-lg' : 'bg-black/70'} 
+                                border border-border-metal rounded 
+                                transition-colors duration-200
+                                hover:border-accent-gold
+                              `}
                             >
-                              {task.title}
-                            </span>
-                          )}
-                          {!editingTaskId && (
-                            <button 
-                              className="ml-2 text-red-600 hover:text-red-400"
-                              onClick={() => handleDeleteTask(task.id)}
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
+                              {/* 拖拽手柄 - 改为明显的UI元素 */}
+                              <div 
+                                {...provided.dragHandleProps}
+                                className="absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-12 flex items-center justify-center bg-accent-gold/70 hover:bg-accent-gold rounded-l cursor-grab group-hover:opacity-100 opacity-30"
+                                title="拖拽调整位置"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                </svg>
+                              </div>
+                              
+                              <input
+                                type="checkbox"
+                                className="mr-2"
+                                checked={task.completed}
+                                onChange={() => toggleComplete(task.id)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              
+                              {editingTaskId === task.id ? (
+                                <input
+                                  ref={editInputRef}
+                                  type="text"
+                                  className="flex-1 px-2 py-1 bg-bg-dark border border-border-metal rounded-md text-text-primary focus:outline-none focus:border-accent-gold"
+                                  value={editingText}
+                                  onChange={(e) => setEditingText(e.target.value)}
+                                  onKeyDown={handleEditKeyDown}
+                                  onBlur={saveEditedTask}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <span 
+                                  className={`${task.completed ? 'line-through text-gray-400' : 'text-white'} flex-1 cursor-pointer`}
+                                  onClick={(e) => {e.stopPropagation(); startEditing(task.id, task.title);}}
+                                >
+                                  {task.title}
+                                </span>
+                              )}
+                              
+                              {!editingTaskId && (
+                                <button 
+                                  className="ml-2 text-red-600 hover:text-red-400"
+                                  onClick={(e) => {e.stopPropagation(); handleDeleteTask(task.id);}}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }}
+                      </Draggable>
+                    );
+                  })}
+                  
                   {provided.placeholder}
+                  
                   {/* 新增任务输入区 - 只在 hover 时显示 */}
                   {hoveredSlot === slot && (
                     <div className="mt-auto flex items-center gap-2 p-2 bg-black/40 rounded-md transition-opacity duration-200">
@@ -854,6 +973,8 @@ const TodayView = () => {
   
   // 渲染笔记标签页内容
   const renderNotesTab = () => {
+    console.log('Exception: 渲染笔记标签页, 当前笔记数量:', notesState.length);
+    
     return (
       <div 
         className="flex flex-col p-4"
@@ -887,62 +1008,66 @@ const TodayView = () => {
           className="overflow-y-auto flex-1 hide-scrollbar space-y-3"
           style={{ minHeight: '100px' }}
         >
-          {notesState.map((note) => (
-            <div
-              key={note.id}
-              className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
-              onDoubleClick={() => startEditingNote(note)}
-            >
-              {editingNoteId === note.id ? (
-                <div className="flex flex-col relative">
-                  <textarea
-                    ref={noteTextareaRef}
-                    className="w-full p-2 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
-                    value={editingNoteContent}
-                    onChange={(e) => setEditingNoteContent(e.target.value)}
-                    onKeyDown={handleNoteKeyDown}
-                  />
-                  <div className="flex justify-end mt-2">
-                    <button 
-                      className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
-                      onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
-                    >
-                      取消
-                    </button>
-                    <button 
-                      className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
-                      onClick={saveEditedNote}
-                    >
-                      保存
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="whitespace-pre-wrap mb-2">{note.content}</div>
-                  <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
-                    <span>
-                      {note.createdAt.toLocaleDateString()} {note.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <div>
+          {/* 确保遍历前笔记状态有效 */}
+          {Array.isArray(notesState) && notesState.map((note) => {
+            console.log('Exception: 渲染单个笔记:', note);
+            return (
+              <div
+                key={note.id}
+                className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
+                onDoubleClick={() => startEditingNote(note)}
+              >
+                {editingNoteId === note.id ? (
+                  <div className="flex flex-col relative">
+                    <textarea
+                      ref={noteTextareaRef}
+                      className="w-full p-2 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
+                      value={editingNoteContent}
+                      onChange={(e) => setEditingNoteContent(e.target.value)}
+                      onKeyDown={handleNoteKeyDown}
+                    />
+                    <div className="flex justify-end mt-2">
                       <button 
-                        className="text-accent-gold hover:text-accent-gold/80 mr-2"
-                        onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
+                        className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
+                        onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
                       >
-                        编辑
+                        取消
                       </button>
                       <button 
-                        className="text-red-500 hover:text-red-400"
-                        onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
+                        className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
+                        onClick={saveEditedNote}
                       >
-                        删除
+                        保存
                       </button>
                     </div>
                   </div>
-                </>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <>
+                    <div className="whitespace-pre-wrap mb-2">{note.content}</div>
+                    <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
+                      <span>
+                        {note.createdAt.toLocaleDateString()} {note.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <div>
+                        <button 
+                          className="text-accent-gold hover:text-accent-gold/80 mr-2"
+                          onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
+                        >
+                          编辑
+                        </button>
+                        <button 
+                          className="text-red-500 hover:text-red-400"
+                          onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
           
           {notesLoading && (
             <div className="text-center py-4">
@@ -953,6 +1078,7 @@ const TodayView = () => {
           {!notesLoading && notesState.length === 0 && (
             <div className="text-center py-8">
               <p className="text-text-secondary text-lg">暂无笔记</p>
+              <p className="text-text-secondary text-sm mt-2">点击上方输入框输入并创建新笔记</p>
             </div>
           )}
         </div>
@@ -974,24 +1100,25 @@ const TodayView = () => {
   const handleDragEnd = async (result: any) => {
     const { source, destination } = result;
     
-    console.log('Drag result:', result);
-    
     // 如果没有目的地或者没有移动，则返回
     if (!destination || 
         (source.droppableId === destination.droppableId && 
          source.index === destination.index)) {
-      console.log('No valid destination or no movement');
       return;
     }
+    
+    // 解析拖拽项ID - 从我们的复合ID中提取原始任务ID
+    const getOriginalTaskId = (draggableId: string) => {
+      const match = draggableId.match(/^task-(.+)-\w+$/);
+      return match ? match[1] : draggableId;
+    };
     
     // 从支线任务或模板任务列表拖到时间段
     if ((source.droppableId === 'challenges' || source.droppableId === 'templates') && 
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
-      console.log('Dragging from task lists to time slot');
       
       const sourceList = source.droppableId === 'challenges' ? challengeTasks : templateTasks;
       const taskToAdd = sourceList[source.index];
-      console.log('Task to add:', taskToAdd);
       
       // 提取ID时去掉前缀
       const draggableId = result.draggableId;
@@ -1005,11 +1132,6 @@ const TodayView = () => {
       const utcNow = new Date();
       const beijingNow = toBeijingTime(utcNow);
       
-      console.log('拖拽时间诊断 - 原始时间:', 
-        `UTC原始: ${utcNow.toISOString()}`, 
-        `北京原始: ${beijingNow.toISOString()}`
-      );
-      
       // 重要：直接使用北京时间的日期部分（不转回UTC）
       // 因为我们需要的是北京时区的日期，而不是UTC时区的日期
       const beijingYear = beijingNow.getFullYear();
@@ -1019,21 +1141,15 @@ const TodayView = () => {
       // 直接构造YYYY-MM-DD格式的日期字符串
       const beijingDateStr = `${beijingYear}-${beijingMonth}-${beijingDay}`;
       
-      console.log('拖拽创建任务使用日期:', 
-        `北京日期字符串 (将直接使用): ${beijingDateStr}`
-      );
-      
       const taskSourceType = source.droppableId === 'challenges' ? 'challenge' : 'template';
       
       // 根据数据库模型创建适当的条目数据
-      console.log('拖拽创建 - 即将发送到数据库的任务数据:');
       const newEntryData = {
         title: originalTask.title,
         timeSlot: destination.droppableId as TimeSlot,
         scheduled_date: beijingDateStr, // 直接使用北京时间日期字符串
         source_type: taskSourceType as 'challenge' | 'template' | 'custom'
       };
-      console.log(JSON.stringify(newEntryData, null, 2));
       
       // 根据源类型添加适当的ID字段
       if (taskSourceType === 'challenge') {
@@ -1041,8 +1157,6 @@ const TodayView = () => {
       } else {
         Object.assign(newEntryData, { template_id: originalTask.id });
       }
-      
-      console.log('添加ID后的最终数据:', JSON.stringify(newEntryData, null, 2));
       
       await createScheduleEntry(newEntryData);
       
@@ -1054,22 +1168,63 @@ const TodayView = () => {
     // 时间段内的任务重新排序或者在时间段之间移动
     if (['morning', 'afternoon', 'evening'].includes(source.droppableId) &&
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
-      console.log('Moving between time slots');
       
       // 找出要移动的任务
-      const tasksInSourceSlot = scheduledTasks.filter(task => task.timeSlot === source.droppableId);
-      const taskToMove = tasksInSourceSlot[source.index];
-      console.log('Task to move:', taskToMove);
+      const sourceSlot = source.droppableId as TimeSlot;
+      const destSlot = destination.droppableId as TimeSlot;
       
-      // 如果时间段发生了变化，更新数据库
-      if (source.droppableId !== destination.droppableId) {
-        await moveTaskBetweenSlots(taskToMove.id, destination.droppableId as TimeSlot);
+      // 获取当前的临时排序状态
+      const currentOrder = { ...temporaryTaskOrder };
+      
+      // 提取原始任务ID
+      const originalTaskId = getOriginalTaskId(result.draggableId);
+      
+      // 根据临时排序获取对应的任务ID
+      const taskIdToMove = currentOrder[sourceSlot][source.index];
+      
+      // 从源位置移除
+      currentOrder[sourceSlot] = currentOrder[sourceSlot].filter(id => id !== taskIdToMove);
+      
+      if (sourceSlot === destSlot) {
+        // 在同一时间段内重新排序 - 只更新临时状态
+        
+        // 在正确的位置插入
+        const newOrder = [...currentOrder[destSlot]];
+        newOrder.splice(destination.index, 0, taskIdToMove);
+        currentOrder[destSlot] = newOrder;
+        
+        // 仅更新临时排序状态
+        setTemporaryTaskOrder(currentOrder);
+      } else {
+        // 在不同时间段之间移动 - 更新任务的时间段属性并保存到数据库
+        
+        // 直接在目标位置插入
+        const newOrder = [...currentOrder[destSlot]];
+        newOrder.splice(destination.index, 0, taskIdToMove);
+        currentOrder[destSlot] = newOrder;
+        
+        setTemporaryTaskOrder(currentOrder);
+        
+        // 如果时间段发生了变化，更新数据库
+        await moveTaskBetweenSlots(taskIdToMove, destSlot);
       }
     }
   };
   
+  // 添加测试笔记到界面
+  const addTestNote = () => {
+    const testNote: Note = {
+      id: 'test-' + Date.now(),
+      content: '这是一条测试笔记 ' + new Date().toLocaleTimeString(),
+      createdAt: new Date()
+    };
+    
+    console.log('Exception: 添加测试笔记到界面:', testNote);
+    setNotesState(prev => [testNote, ...prev]);
+  };
+  
   return (
-    <DragDropContext key={`dnd-context-${forceUpdateKey}`} onDragEnd={handleDragEnd}>
+    <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-6 pb-40 hide-scrollbar">
         {/* 上方时间段和任务源区域 */}
         <div className="flex gap-6 min-h-[400px]">
