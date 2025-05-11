@@ -331,7 +331,7 @@ export const supabaseApi = {
         .from('notes')
         .select('*')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('updated_at', { ascending: false });
       
       if (error) {
         console.error('Error getting notes:', error);
@@ -344,7 +344,8 @@ export const supabaseApi = {
     /**
      * 创建新笔记
      */
-    async create(note: Omit<Note, 'note_id' | 'created_at'>): Promise<Note> {
+    async create(note: Omit<Note, 'note_id' | 'created_at' | 'updated_at'>): Promise<Note> {
+      // 创建笔记时，不需要手动设置 updated_at，让数据库自动设置为当前时间
       const { data, error } = await supabase
         .from('notes')
         .insert(note)
@@ -363,9 +364,19 @@ export const supabaseApi = {
      * 更新笔记
      */
     async update(noteId: string | number, content: string, userId: string | number): Promise<void> {
+      // 使用UTC+8时间
+      const now = new Date();
+      // 格式化为ISO字符串，保留时区信息
+      const formattedTime = now.toISOString();
+      
+      console.log('Using UTC+8 time for update:', formattedTime);
+      
       const { error } = await supabase
         .from('notes')
-        .update({ content })
+        .update({ 
+          content,
+          updated_at: formattedTime
+        })
         .eq('note_id', noteId)
         .eq('user_id', userId);
       

@@ -516,7 +516,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
           .from('notes')
           .select('*')
           .eq('user_id', userIdNum)
-          .order('created_at', { ascending: false });
+          .order('updated_at', { ascending: false });
         
         if (error) {
           console.log('Exception: Supabase query error:', error.message);
@@ -565,7 +565,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
         
         const { data, error } = await supabase
           .from('notes')
-          .insert({ content, user_id: userIdNum })
+          .insert({ 
+            content, 
+            user_id: userIdNum
+          })
           .select()
           .single();
         
@@ -617,9 +620,18 @@ export function DbProvider({ children }: { children: ReactNode }) {
           throw new Error('Invalid ID format');
         }
         
+        // 明确设置 updated_at 字段为当前时间（UTC+8）
+        // 获取本地 ISO 时间字符串
+        const now = new Date();
+        const formattedTime = now.toISOString();
+        console.log('Exception: Setting updated_at to:', formattedTime);
+        
         const { error } = await supabase
           .from('notes')
-          .update({ content })
+          .update({ 
+            content, 
+            updated_at: formattedTime 
+          })
           .eq('note_id', noteIdNum)
           .eq('user_id', userIdNum);
         

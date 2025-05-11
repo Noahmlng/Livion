@@ -37,6 +37,7 @@ export interface Note {
   goal_id?: number;
   content: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 // Goal interface
@@ -248,13 +249,13 @@ export const noteService = {
       .from('notes')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
       
     if (error) throw error;
     return data || [];
   },
   
-  async create(note: Omit<Note, 'note_id' | 'created_at'>, userId: string): Promise<Note> {
+  async create(note: Omit<Note, 'note_id' | 'created_at' | 'updated_at'>, userId: string): Promise<Note> {
     const { data, error } = await supabase
       .from('notes')
       .insert({ ...note, user_id: userId })
@@ -266,9 +267,19 @@ export const noteService = {
   },
   
   async update(id: string, content: string, userId: string): Promise<void> {
+    // 使用UTC+8时间
+    const now = new Date();
+    // 格式化为ISO字符串，保留时区信息
+    const formattedTime = now.toISOString();
+    
+    console.log('Using UTC+8 time for local update:', formattedTime);
+    
     const { error } = await supabase
       .from('notes')
-      .update({ content })
+      .update({ 
+        content,
+        updated_at: formattedTime
+      })
       .eq('note_id', id)
       .eq('user_id', userId);
       

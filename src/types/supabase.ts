@@ -64,6 +64,7 @@ export interface Note {
   goal_id?: number;        // 外键，关联到 goals 表
   content: string;         // 笔记内容
   created_at: string;      // 创建时间
+  updated_at: string;      // 更新时间
 }
 
 // 辅助类型定义

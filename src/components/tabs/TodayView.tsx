@@ -55,6 +55,7 @@ interface Note {
   id: string;
   content: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 // 辅助函数：检查两个日期是否在同一天（基于当地时间）
@@ -69,25 +70,60 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
 // 辅助函数：正确处理UTC日期，避免自动时区转换导致的+8小时问题
 const correctUtcDate = (isoDateString: string | undefined): Date => {
   if (!isoDateString) return new Date();
+
+  // 直接用JS的Date解析，日期应该已经是UTC+8
+  const date = new Date(isoDateString);
   
-  // 将ISO日期字符串解析为UTC日期组件
-  const match = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-  if (!match) return new Date(isoDateString);
+  // 如果日期解析正确，直接返回
+  if (!isNaN(date.getTime())) {
+    console.log(`Timestamp ${isoDateString} parsed successfully to: ${date.toLocaleString()}`);
+    return date;
+  }
   
-  // 解析日期组件
-  const [_, year, month, day, hours, minutes, seconds] = match;
+  // 尝试格式化处理可能存在的特殊格式
+  // PostgreSQL timestamptz格式: 2025-05-11 06:43:43.237+00
+  const postgresMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (postgresMatch) {
+    const [_, year, month, day, hours, minutes, seconds] = postgresMatch;
+    console.log(`Parsing special PostgreSQL format: ${isoDateString}`);
+    
+    // 创建本地日期对象
+    const newDate = new Date();
+    newDate.setFullYear(parseInt(year));
+    newDate.setMonth(parseInt(month) - 1); // 月份从0开始
+    newDate.setDate(parseInt(day));
+    newDate.setHours(parseInt(hours));
+    newDate.setMinutes(parseInt(minutes));
+    newDate.setSeconds(parseInt(seconds));
+    newDate.setMilliseconds(0);
+    
+    console.log(`Parsed to: ${newDate.toLocaleString()}`);
+    return newDate;
+  }
   
-  // 创建当地时间的Date对象，不进行时区转换
-  const date = new Date();
-  date.setFullYear(parseInt(year));
-  date.setMonth(parseInt(month) - 1); // 月份从0开始
-  date.setDate(parseInt(day));
-  date.setHours(parseInt(hours));
-  date.setMinutes(parseInt(minutes));
-  date.setSeconds(parseInt(seconds));
-  date.setMilliseconds(0);
+  // 标准ISO格式: 2025-05-11T06:43:43.237Z
+  const isoMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (isoMatch) {
+    const [_, year, month, day, hours, minutes, seconds] = isoMatch;
+    console.log(`Parsing ISO format: ${isoDateString}`);
+    
+    // 创建本地日期对象
+    const newDate = new Date();
+    newDate.setFullYear(parseInt(year));
+    newDate.setMonth(parseInt(month) - 1); // 月份从0开始
+    newDate.setDate(parseInt(day));
+    newDate.setHours(parseInt(hours));
+    newDate.setMinutes(parseInt(minutes));
+    newDate.setSeconds(parseInt(seconds));
+    newDate.setMilliseconds(0);
+    
+    console.log(`Parsed to: ${newDate.toLocaleString()}`);
+    return newDate;
+  }
   
-  return date;
+  // 最后尝试直接使用Date解析
+  console.log(`Fallback to direct Date parsing: ${isoDateString}`);
+  return new Date(isoDateString);
 };
 
 const TodayView = () => {
@@ -352,14 +388,9 @@ const TodayView = () => {
     if (notesLoading) return;
     setNotesLoading(true);
     
-    try {
-      console.log('Exception: 开始加载笔记 - 当前页码:', page, '重置状态:', reset);
-      
+    try {      
       // 加载数据库中的笔记
       await loadNotes();
-      
-      console.log('Exception: 笔记已从数据库加载, 可用笔记数量:', notes.length);
-      console.log('Exception: 笔记数据样例:', notes.length > 0 ? JSON.stringify(notes[0]) : '无笔记');
       
       if (reset) {
         // 重置分页状态
@@ -371,17 +402,22 @@ const TodayView = () => {
           
           // 使用辅助函数正确处理日期，避免时区转换问题
           const createdTime = correctUtcDate(note.created_at);
+          const updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
           
           // 创建UI需要的笔记对象格式
           const uiNote: Note = {
             id: String(note.note_id), // 强制转换为字符串
             content: note.content || '',
-            createdAt: createdTime
+            createdAt: createdTime,
+            updatedAt: updatedTime
           };
           
           console.log('Exception: 转换后的笔记对象:', uiNote);
           return uiNote;
         });
+        
+        // 确保笔记按照更新时间降序排列
+        dbNotes.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         
         console.log('Exception: 重置后的笔记数量:', dbNotes.length);
         console.log('Exception: 即将更新UI的笔记列表:', JSON.stringify(dbNotes));
@@ -396,10 +432,13 @@ const TodayView = () => {
         const newNotes = notes.slice(startIndex, startIndex + 10).map(note => {
           // 使用辅助函数正确处理日期，避免时区转换问题
           const createdTime = correctUtcDate(note.created_at);
+          const updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+          
           return {
             id: String(note.note_id), // 强制转换为字符串
             content: note.content || '',
-            createdAt: createdTime
+            createdAt: createdTime,
+            updatedAt: updatedTime
           };
         });
         
@@ -407,6 +446,8 @@ const TodayView = () => {
         
         setNotesState(prevNotes => {
           const updatedNotes = [...prevNotes, ...newNotes];
+          // 确保所有笔记按照更新时间降序排列
+          updatedNotes.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
           console.log('Exception: 更新后的全部笔记数量:', updatedNotes.length);
           return updatedNotes;
         });
@@ -481,24 +522,12 @@ const TodayView = () => {
       console.log('Exception: 创建笔记结果:', result);
       
       if (result) {
-        // 使用辅助函数正确处理日期，避免时区转换问题
-        const createdTime = correctUtcDate(result.created_at);
-        
-        // 添加到本地状态
-        const newNoteObj: Note = {
-          id: String(result.note_id),
-          content: result.content || '',
-          createdAt: createdTime
-        };
-        
-        console.log('Exception: 创建新笔记:', 
-          `时间: ${createdTime.toLocaleString()}`,
-          `笔记ID: ${newNoteObj.id}`,
-          `笔记内容: ${newNoteObj.content}`
-        );
-        
-        setNotesState([newNoteObj, ...notesState]);
+        // 清空输入框
         setNewNote('');
+        
+        // 重新加载笔记列表以确保正确排序
+        console.log('重新加载笔记列表以确保正确排序');
+        await loadNotesData(1, true);
       } else {
         console.log('Exception: 创建笔记失败，返回结果为空');
       }
@@ -524,21 +553,6 @@ const TodayView = () => {
   const saveEditedNote = async () => {
     if (!editingNoteId || !editingNoteContent.trim()) return;
     
-    // 更新编辑中的笔记
-    const now = new Date();
-    
-    // 使用笔记ID查找对应的笔记
-    const noteIndex = notesState.findIndex(note => note.id === editingNoteId);
-    if (noteIndex === -1) return;
-    
-    // 更新本地状态
-    const updatedNotes = [...notesState];
-    updatedNotes[noteIndex] = {
-      ...updatedNotes[noteIndex],
-      content: editingNoteContent
-    };
-    setNotesState(updatedNotes);
-    
     // 发送更新到数据库
     try {
       await updateNote(editingNoteId, editingNoteContent.trim());
@@ -547,8 +561,10 @@ const TodayView = () => {
       setEditingNoteId(null);
       setEditingNoteContent('');
       
-      // 可选：重新加载数据以确保与服务器同步
-      // 在这个简单的场景中可能不需要，因为我们已经更新了本地状态
+      // 重新加载笔记列表确保按最新的updated_at正确排序
+      console.log('重新加载笔记列表以确保正确排序');
+      await loadNotesData(1, true);
+      
     } catch (error) {
       console.error('保存笔记失败:', error);
       // 错误处理逻辑，例如显示错误消息
@@ -572,8 +588,8 @@ const TodayView = () => {
       const success = await deleteNote(noteId);
       
       if (success) {
-        // 从本地状态中删除
-        setNotesState(notes => notes.filter(note => note.id !== noteId));
+        // 重新加载笔记列表确保正确排序
+        await loadNotesData(1, true);
       }
     } catch (error) {
       console.error('删除笔记失败:', error);
@@ -1034,7 +1050,7 @@ const TodayView = () => {
                     <div className="whitespace-pre-wrap mb-2">{note.content}</div>
                     <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
                       <span>
-                        {`${note.createdAt.getFullYear()}-${String(note.createdAt.getMonth() + 1).padStart(2, '0')}-${String(note.createdAt.getDate()).padStart(2, '0')} ${String(note.createdAt.getHours()).padStart(2, '0')}:${String(note.createdAt.getMinutes()).padStart(2, '0')}`}
+                        {`${note.updatedAt.getFullYear()}-${String(note.updatedAt.getMonth() + 1).padStart(2, '0')}-${String(note.updatedAt.getDate()).padStart(2, '0')} ${String(note.updatedAt.getHours()).padStart(2, '0')}:${String(note.updatedAt.getMinutes()).padStart(2, '0')}`}
                       </span>
                       <div>
                         <button 
