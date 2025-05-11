@@ -3,8 +3,7 @@ import { User, Task, ScheduleEntry, Note, TaskTemplate, Goal } from '../types/su
 
 /**
  * 格式化日期为 YYYY-MM-DD 字符串
- * 由于我们存储 UTC 时间但展示北京时间 (UTC+8)，
- * 这个函数确保日期正确转换为数据库格式
+ * 不再需要时区转换，因为系统已经是UTC+8
  */
 const formatDate = (date: Date | string): string => {
   if (typeof date === 'string') {
@@ -16,8 +15,11 @@ const formatDate = (date: Date | string): string => {
     return new Date(date).toISOString().split('T')[0];
   }
   
-  // 对于Date对象，直接使用 ISO 格式并提取日期部分
-  return date.toISOString().split('T')[0];
+  // 对于Date对象，使用本地时间格式化日期，避免时区转换
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
@@ -247,10 +249,10 @@ export const supabaseApi = {
       console.log('Date value before formatting:', entry.date, 'Type:', typeof entry.date);
       
       // 确保日期格式正确 & 移除entry_id字段，让数据库自动生成
-      const { entry_id, ...entryWithoutId } = entry as any;
+      const { entry_id, created_at, ...entryWithoutIdAndTimestamp } = entry as any;
       const entryToInsert = {
-        ...entryWithoutId,
-        date: formatDate(entryWithoutId.date)
+        ...entryWithoutIdAndTimestamp,
+        date: formatDate(entryWithoutIdAndTimestamp.date)
       };
       
       console.log('Formatted date for database:', entryToInsert.date);

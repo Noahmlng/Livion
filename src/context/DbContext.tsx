@@ -5,6 +5,7 @@ import { taskService, scheduleService, noteService, goalService } from '../utils
 import { supabaseApi } from '../utils/supabaseApi';
 import { convertSupabaseEntries, convertUpdateFields, localToSupabaseEntry, supabaseToLocalEntry } from '../utils/scheduleAdapter';
 import { useAuth } from './AuthContext';
+import supabase from '../utils/supabase';
 
 interface DbContextType {
   userId: string | null;
@@ -85,6 +86,39 @@ export function DbProvider({ children }: { children: ReactNode }) {
     
     setLoading(true);
     try {
+      // 首先尝试使用 Supabase API
+      try {
+        const userIdNum = parseInt(userId);
+        
+        if (isNaN(userIdNum)) {
+          throw new Error('Invalid user ID format');
+        }
+        
+        // 添加用户ID，不包含created_at，使用数据库默认时间
+        const taskData = {
+          ...data,
+          user_id: userIdNum
+        };
+        
+        const { data: result, error } = await supabase
+          .from('tasks')
+          .insert(taskData)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Supabase create task error:', error);
+          throw error;
+        }
+        
+        console.log('Task created successfully with Supabase:', result);
+        await loadTasks();
+        return result;
+      } catch (supabaseError) {
+        console.warn('Supabase API failed for task creation, falling back to taskService:', supabaseError);
+      }
+      
+      // 回退到本地数据库
       // 添加用户ID
       const taskWithUserId = {
         ...data,
@@ -306,7 +340,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         };
         
         // 准备数据并转换为 Supabase 格式
-        const localEntry: ScheduleEntry = {
+        const localEntry: Omit<ScheduleEntry, 'created_at'> = {
           entry_id: 0, // Will be removed by localToSupabaseEntry
           user_id: userIdNum,
           date: dbFormatEntry.date,
@@ -461,34 +495,103 @@ export function DbProvider({ children }: { children: ReactNode }) {
 
   // Note functions
   const loadNotes = async () => {
-    if (!userId) return;
+    if (!userId) {
+      console.log('Exception: No userId available when trying to load notes');
+      return;
+    }
     
     setLoading(true);
     try {
+      console.log('Exception: Attempting to load notes for userId:', userId);
+      
+      // Try to use Supabase API first
+      try {
+        const userIdNum = parseInt(userId);
+        
+        if (isNaN(userIdNum)) {
+          throw new Error('Invalid user ID format');
+        }
+        
+        const { data, error } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', userIdNum)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.log('Exception: Supabase query error:', error.message);
+          throw error;
+        }
+        
+        console.log('Exception: Notes loaded successfully, count:', data?.length || 0);
+        console.log('Exception: First note:', data && data.length > 0 ? data[0] : 'No notes');
+        
+        // 处理notes并加载到状态中
+        setNotes(data || []);
+        return;
+      } catch (supabaseError) {
+        console.log('Exception: Supabase API failed, falling back to local DB:', supabaseError);
+      }
+      
+      // Fall back to noteService
       const result = await noteService.getAll(userId);
-      // 处理notes并加载到状态中
+      console.log('Exception: Notes loaded via noteService, count:', result?.length || 0);
+      console.log('Exception: First note from noteService:', result && result.length > 0 ? result[0] : 'No notes');
       setNotes(result);
     } catch (error) {
-      console.error('Error loading notes:', error);
+      console.log('Exception: Error loading notes:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const createNote = async (content: string) => {
-    if (!userId) return null;
+    if (!userId) {
+      console.log('Exception: No userId available when trying to create note');
+      return null;
+    }
     
     setLoading(true);
     try {
+      console.log('Exception: Attempting to create note for userId:', userId, 'with content:', content);
+      
+      // Try to use Supabase API directly first
+      try {
+        const userIdNum = parseInt(userId);
+        
+        if (isNaN(userIdNum)) {
+          throw new Error('Invalid user ID format');
+        }
+        
+        const { data, error } = await supabase
+          .from('notes')
+          .insert({ content, user_id: userIdNum })
+          .select()
+          .single();
+        
+        if (error) {
+          console.log('Exception: Supabase create note error:', error.message);
+          throw error;
+        }
+        
+        console.log('Exception: Note created successfully:', data);
+        await loadNotes(); // Refresh the notes list
+        return data;
+      } catch (supabaseError) {
+        console.log('Exception: Supabase API failed for note creation, falling back to noteService:', supabaseError);
+      }
+      
+      // Fall back to noteService
       const newNote = {
         content,
         user_id: parseInt(userId)
       };
       const result = await noteService.create(newNote, userId);
+      console.log('Exception: Note created via noteService:', result);
       await loadNotes();
       return result;
     } catch (error) {
-      console.error('Error creating note:', error);
+      console.log('Exception: Error creating note:', error);
       return null;
     } finally {
       setLoading(false);
@@ -496,15 +599,49 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const updateNote = async (noteId: string, content: string) => {
-    if (!userId) return false;
+    if (!userId) {
+      console.log('Exception: No userId available when trying to update note');
+      return false;
+    }
     
     setLoading(true);
     try {
+      console.log('Exception: Attempting to update note:', noteId, 'for userId:', userId, 'with content:', content);
+      
+      // Try to use Supabase API directly first
+      try {
+        const userIdNum = parseInt(userId);
+        const noteIdNum = parseInt(noteId);
+        
+        if (isNaN(userIdNum) || isNaN(noteIdNum)) {
+          throw new Error('Invalid ID format');
+        }
+        
+        const { error } = await supabase
+          .from('notes')
+          .update({ content })
+          .eq('note_id', noteIdNum)
+          .eq('user_id', userIdNum);
+        
+        if (error) {
+          console.log('Exception: Supabase update note error:', error.message);
+          throw error;
+        }
+        
+        console.log('Exception: Note updated successfully');
+        await loadNotes(); // Refresh the notes list
+        return true;
+      } catch (supabaseError) {
+        console.log('Exception: Supabase API failed for note update, falling back to noteService:', supabaseError);
+      }
+      
+      // Fall back to noteService
       await noteService.update(noteId, content, userId);
+      console.log('Exception: Note updated via noteService');
       await loadNotes();
       return true;
     } catch (error) {
-      console.error('Error updating note:', error);
+      console.log('Exception: Error updating note:', error);
       return false;
     } finally {
       setLoading(false);
@@ -512,15 +649,49 @@ export function DbProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteNote = async (noteId: string) => {
-    if (!userId) return false;
+    if (!userId) {
+      console.log('Exception: No userId available when trying to delete note');
+      return false;
+    }
     
     setLoading(true);
     try {
+      console.log('Exception: Attempting to delete note:', noteId, 'for userId:', userId);
+      
+      // Try to use Supabase API directly first
+      try {
+        const userIdNum = parseInt(userId);
+        const noteIdNum = parseInt(noteId);
+        
+        if (isNaN(userIdNum) || isNaN(noteIdNum)) {
+          throw new Error('Invalid ID format');
+        }
+        
+        const { error } = await supabase
+          .from('notes')
+          .delete()
+          .eq('note_id', noteIdNum)
+          .eq('user_id', userIdNum);
+        
+        if (error) {
+          console.log('Exception: Supabase delete note error:', error.message);
+          throw error;
+        }
+        
+        console.log('Exception: Note deleted successfully');
+        await loadNotes(); // Refresh the notes list
+        return true;
+      } catch (supabaseError) {
+        console.log('Exception: Supabase API failed for note deletion, falling back to noteService:', supabaseError);
+      }
+      
+      // Fall back to noteService
       await noteService.delete(noteId, userId);
+      console.log('Exception: Note deleted via noteService');
       await loadNotes();
       return true;
     } catch (error) {
-      console.error('Error deleting note:', error);
+      console.log('Exception: Error deleting note:', error);
       return false;
     } finally {
       setLoading(false);
@@ -539,7 +710,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         scheduleEntries,
         loadScheduleEntries,
         loadScheduleEntriesRange,
-        createScheduleEntry,
+        createScheduleEntry: createScheduleEntry as (data: any) => Promise<ScheduleEntry | null>,
         updateScheduleEntry,
         deleteScheduleEntry,
         notes,

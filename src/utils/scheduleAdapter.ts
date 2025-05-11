@@ -24,14 +24,14 @@ export function supabaseToLocalEntry(entry: SupabaseScheduleEntry): DbScheduleEn
 /**
  * 将本地 DbScheduleEntry 转换为 Supabase ScheduleEntry
  */
-export function localToSupabaseEntry(entry: DbScheduleEntry): Omit<SupabaseScheduleEntry, 'entry_id'> {
+export function localToSupabaseEntry(entry: DbScheduleEntry): Omit<SupabaseScheduleEntry, 'entry_id' | 'created_at'> {
   console.log('localToSupabaseEntry - 输入日期值:', entry.date, 'Type:', typeof entry.date);
   
   const formattedDate = formatDate(entry.date);
   console.log('localToSupabaseEntry - 格式化后日期值:', formattedDate);
   
-  // 创建基本对象，不包含entry_id
-  const result: Omit<SupabaseScheduleEntry, 'entry_id'> = {
+  // 创建基本对象，不包含entry_id和created_at，让数据库使用默认时间
+  const result: Omit<SupabaseScheduleEntry, 'entry_id' | 'created_at'> = {
     user_id: entry.user_id,
     date: formattedDate,
     slot: entry.slot as TimeSlot,
@@ -41,11 +41,10 @@ export function localToSupabaseEntry(entry: DbScheduleEntry): Omit<SupabaseSched
     ref_template_id: entry.ref_template_id,
     custom_name: entry.custom_name,
     custom_desc: entry.custom_desc,
-    reward_points: entry.reward_points,
-    created_at: entry.created_at || new Date().toISOString()
+    reward_points: entry.reward_points
   };
   
-  console.log('转换后的对象 (不含entry_id):', result);
+  console.log('转换后的对象 (不含entry_id和created_at):', result);
   return result;
 }
 
@@ -58,7 +57,8 @@ function formatDate(date: Date | string | undefined): string {
   
   if (!date) {
     // 如果日期未定义，返回今天的日期
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     console.log('formatDate - 日期未定义，使用今天:', today);
     return today;
   }
@@ -79,10 +79,13 @@ function formatDate(date: Date | string | undefined): string {
     return date; // 否则直接返回字符串
   }
   
-  // 处理Date对象
-  const isoDate = date.toISOString().split('T')[0];
-  console.log('formatDate - 从Date对象转换:', isoDate, '原始Date:', date);
-  return isoDate;
+  // 处理Date对象 - 直接使用系统时间（UTC+8）
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const formattedDate = `${year}-${month}-${day}`;
+  console.log('formatDate - 从Date对象转换:', formattedDate, '原始Date:', date);
+  return formattedDate;
 }
 
 /**
@@ -102,9 +105,15 @@ export function convertUpdateFields(data: Partial<DbScheduleEntry>): Partial<Sup
   if (data.status !== undefined) result.status = data.status as TaskStatus;
   if (data.custom_name !== undefined) result.custom_name = data.custom_name;
   if (data.date !== undefined) {
-    result.date = typeof data.date === 'string'
-      ? data.date
-      : data.date.toISOString().split('T')[0];
+    if (typeof data.date === 'string') {
+      result.date = data.date;
+    } else {
+      // 使用本地日期格式化，避免时区问题
+      const year = data.date.getFullYear();
+      const month = String(data.date.getMonth() + 1).padStart(2, '0');
+      const day = String(data.date.getDate()).padStart(2, '0');
+      result.date = `${year}-${month}-${day}`;
+    }
   }
   if (data.ref_task_id !== undefined) result.ref_task_id = data.ref_task_id;
   if (data.ref_template_id !== undefined) result.ref_template_id = data.ref_template_id;
