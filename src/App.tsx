@@ -23,7 +23,7 @@ function MainApp() {
   
   // 检测用户状态并决定是否显示登录页面
   useEffect(() => {
-    console.log('User state changed:', user?.id || 'no user');
+    console.log('User state changed:', user?.user_id || 'no user');
     if (user) {
       // 有用户登录，隐藏登录界面
       setShowLogin(false);

@@ -1,0 +1,26 @@
+/* Styles to improve react-beautiful-dnd functionality */
+
+/* Disable user selection during drag operations */
+.react-draggable, 
+.react-draggable-dragging, 
+[data-rbd-draggable-id], 
+[data-rbd-draggable-context-id] {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Set proper cursor for draggable elements */
+[data-rbd-draggable-id] {
+  cursor: grab !important;
+}
+
+[data-rbd-draggable-id]:active {
+  cursor: grabbing !important;
+}
+
+/* Ensure proper z-index for dragging elements */
+[data-rbd-draggable-id][data-rbd-dragging="true"] {
+  z-index: 9999 !important;
+} 

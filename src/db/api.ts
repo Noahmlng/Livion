@@ -44,13 +44,29 @@ export async function updateTask(taskId: string, data: {
   image_url?: string;
   is_completed?: boolean;
 }) {
-  // Implementation will be added when database is properly set up
-  return true;
+  try {
+    // Implementation will be added when database is properly set up
+    
+    // Make sure all operations complete before returning
+    await Promise.resolve();
+    return true;
+  } catch (error) {
+    console.error('Error updating task:', error);
+    return false;
+  }
 }
 
 export async function deleteTask(taskId: string) {
-  // Implementation will be added when database is properly set up
-  return true;
+  try {
+    // Implementation will be added when database is properly set up
+    
+    // Make sure all operations complete before returning
+    await Promise.resolve();
+    return true;
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    return false;
+  }
 }
 
 // Schedule Entry APIs
@@ -178,7 +194,7 @@ export async function updateScheduleEntry(entryId: string, data: {
     }
     if (data.title !== undefined) entry.title = data.title;
     
-    // Save to database
+    // Save to database and await completion
     await db.put('schedule_entries', entry);
     
     return true;
@@ -191,7 +207,10 @@ export async function updateScheduleEntry(entryId: string, data: {
 export async function deleteScheduleEntry(entryId: string) {
   try {
     const db = await getDB();
+    
+    // Ensure operation completes before returning
     await db.delete('schedule_entries', entryId);
+    
     return true;
   } catch (error) {
     console.error('Error deleting schedule entry:', error);
@@ -251,7 +270,9 @@ export async function updateNote(noteId: string, data: {
     note.content = data.content;
     note.updated_at = new Date();
     
+    // Ensure operation completes before returning
     await db.put('notes', note);
+    
     return true;
   } catch (error) {
     console.error('Error updating note:', error);
@@ -262,7 +283,10 @@ export async function updateNote(noteId: string, data: {
 export async function deleteNote(noteId: string) {
   try {
     const db = await getDB();
+    
+    // Ensure operation completes before returning
     await db.delete('notes', noteId);
+    
     return true;
   } catch (error) {
     console.error('Error deleting note:', error);

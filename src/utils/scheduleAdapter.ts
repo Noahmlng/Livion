@@ -15,7 +15,7 @@ export function supabaseToLocalEntry(entry: SupabaseScheduleEntry): DbScheduleEn
     ref_task_id: entry.ref_task_id,
     ref_template_id: entry.ref_template_id,
     custom_name: entry.custom_name,
-    custom_desc: entry.custom_desc,
+    description: entry.description,
     reward_points: entry.reward_points,
     created_at: entry.created_at
   };
@@ -40,7 +40,7 @@ export function localToSupabaseEntry(entry: DbScheduleEntry): Omit<SupabaseSched
     ref_task_id: entry.ref_task_id,
     ref_template_id: entry.ref_template_id,
     custom_name: entry.custom_name,
-    custom_desc: entry.custom_desc,
+    description: entry.description,
     reward_points: entry.reward_points
   };
   

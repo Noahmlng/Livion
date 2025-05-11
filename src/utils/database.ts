@@ -25,7 +25,7 @@ export interface ScheduleEntry {
   ref_task_id?: number;
   ref_template_id?: number;
   custom_name?: string;
-  custom_desc?: string;
+  description?: string;
   reward_points: number;
   created_at?: string;
 }

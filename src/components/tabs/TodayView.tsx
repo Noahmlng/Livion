@@ -16,6 +16,9 @@ import morningBg from '../../assets/morning-bg.jpg';
 import afternoonBg from '../../assets/afternoon-bg.jpg';
 import eveningBg from '../../assets/evening-bg.jpg';
 import './hideScrollbar.css';
+import './dragStyles.css';
+import supabase from '../../utils/supabase';
+import { useDragDropFix } from '../../utils/dragFix';
 
 // 时间段类型
 type TimeSlot = 'morning' | 'afternoon' | 'evening';
@@ -58,6 +61,29 @@ interface Note {
   updatedAt: Date;
 }
 
+// 任务模板接口
+interface TaskTemplate {
+  template_id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  default_points: number;
+  created_at?: string;
+}
+
+// 任务接口
+interface Task {
+  task_id: number;
+  name: string;
+  description?: string;
+  due_date?: string;
+  status?: string;
+  reward_points?: number;
+  category?: string;
+  goal_id?: number;
+  user_id: number;
+}
+
 // 辅助函数：检查两个日期是否在同一天（基于当地时间）
 const isSameDay = (date1: Date, date2: Date): boolean => {
   return (
@@ -68,67 +94,110 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
 };
 
 // 辅助函数：正确处理UTC日期，避免自动时区转换导致的+8小时问题
-const correctUtcDate = (isoDateString: string | undefined): Date => {
+const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
   if (!isoDateString) return new Date();
 
-  // 直接用JS的Date解析，日期应该已经是UTC+8
-  const date = new Date(isoDateString);
-  
-  // 如果日期解析正确，直接返回
-  if (!isNaN(date.getTime())) {
-    console.log(`Timestamp ${isoDateString} parsed successfully to: ${date.toLocaleString()}`);
-    return date;
+  try {
+    // 检查是否已经是日期对象
+    if (typeof isoDateString !== 'string' && isoDateString instanceof Date) {
+      return isoDateString;
+    }
+    
+    // 如果是字符串的日期对象表示（如来自JSON的结果）
+    if (typeof isoDateString === 'string' && isoDateString.includes('{"')) {
+      try {
+        const parsedObj = JSON.parse(isoDateString);
+        if (parsedObj && typeof parsedObj === 'object' && typeof parsedObj.getFullYear === 'function') {
+          return new Date(parsedObj);
+        }
+      } catch (e) {
+        // 解析JSON失败，继续下一步
+      }
+    }
+
+    // 直接用JS的Date解析，日期应该已经是UTC+8
+    const date = new Date(isoDateString);
+    
+    // 如果日期解析正确，直接返回
+    if (!isNaN(date.getTime())) {
+      console.log(`Timestamp ${isoDateString} parsed successfully to: ${date.toLocaleString()}`);
+      return date;
+    }
+    
+    // 尝试格式化处理可能存在的特殊格式
+    // PostgreSQL timestamptz格式: 2025-05-11 06:43:43.237+00
+    const postgresMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+    if (postgresMatch) {
+      const [_, year, month, day, hours, minutes, seconds] = postgresMatch;
+      console.log(`Parsing special PostgreSQL format: ${isoDateString}`);
+      
+      // 创建本地日期对象
+      const newDate = new Date();
+      newDate.setFullYear(parseInt(year));
+      newDate.setMonth(parseInt(month) - 1); // 月份从0开始
+      newDate.setDate(parseInt(day));
+      newDate.setHours(parseInt(hours));
+      newDate.setMinutes(parseInt(minutes));
+      newDate.setSeconds(parseInt(seconds));
+      newDate.setMilliseconds(0);
+      
+      console.log(`Parsed to: ${newDate.toLocaleString()}`);
+      return newDate;
+    }
+    
+    // 标准ISO格式: 2025-05-11T06:43:43.237Z
+    const isoMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (isoMatch) {
+      const [_, year, month, day, hours, minutes, seconds] = isoMatch;
+      console.log(`Parsing ISO format: ${isoDateString}`);
+      
+      // 创建本地日期对象
+      const newDate = new Date();
+      newDate.setFullYear(parseInt(year));
+      newDate.setMonth(parseInt(month) - 1); // 月份从0开始
+      newDate.setDate(parseInt(day));
+      newDate.setHours(parseInt(hours));
+      newDate.setMinutes(parseInt(minutes));
+      newDate.setSeconds(parseInt(seconds));
+      newDate.setMilliseconds(0);
+      
+      console.log(`Parsed to: ${newDate.toLocaleString()}`);
+      return newDate;
+    }
+    
+    // 仅日期格式: 2025-05-11
+    const dateOnlyMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnlyMatch) {
+      const [_, year, month, day] = dateOnlyMatch;
+      console.log(`Parsing date-only format: ${isoDateString}`);
+      
+      // 创建本地日期对象
+      const newDate = new Date();
+      newDate.setFullYear(parseInt(year));
+      newDate.setMonth(parseInt(month) - 1); // 月份从0开始
+      newDate.setDate(parseInt(day));
+      newDate.setHours(0, 0, 0, 0);
+      
+      console.log(`Parsed to: ${newDate.toLocaleString()}`);
+      return newDate;
+    }
+    
+    // 最后尝试直接使用Date解析
+    console.log(`Fallback to direct Date parsing: ${isoDateString}`);
+    return new Date(isoDateString);
+  } catch (error) {
+    console.error('Date parsing error:', error);
+    return new Date(); // 返回当前时间作为备选
   }
-  
-  // 尝试格式化处理可能存在的特殊格式
-  // PostgreSQL timestamptz格式: 2025-05-11 06:43:43.237+00
-  const postgresMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-  if (postgresMatch) {
-    const [_, year, month, day, hours, minutes, seconds] = postgresMatch;
-    console.log(`Parsing special PostgreSQL format: ${isoDateString}`);
-    
-    // 创建本地日期对象
-    const newDate = new Date();
-    newDate.setFullYear(parseInt(year));
-    newDate.setMonth(parseInt(month) - 1); // 月份从0开始
-    newDate.setDate(parseInt(day));
-    newDate.setHours(parseInt(hours));
-    newDate.setMinutes(parseInt(minutes));
-    newDate.setSeconds(parseInt(seconds));
-    newDate.setMilliseconds(0);
-    
-    console.log(`Parsed to: ${newDate.toLocaleString()}`);
-    return newDate;
-  }
-  
-  // 标准ISO格式: 2025-05-11T06:43:43.237Z
-  const isoMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-  if (isoMatch) {
-    const [_, year, month, day, hours, minutes, seconds] = isoMatch;
-    console.log(`Parsing ISO format: ${isoDateString}`);
-    
-    // 创建本地日期对象
-    const newDate = new Date();
-    newDate.setFullYear(parseInt(year));
-    newDate.setMonth(parseInt(month) - 1); // 月份从0开始
-    newDate.setDate(parseInt(day));
-    newDate.setHours(parseInt(hours));
-    newDate.setMinutes(parseInt(minutes));
-    newDate.setSeconds(parseInt(seconds));
-    newDate.setMilliseconds(0);
-    
-    console.log(`Parsed to: ${newDate.toLocaleString()}`);
-    return newDate;
-  }
-  
-  // 最后尝试直接使用Date解析
-  console.log(`Fallback to direct Date parsing: ${isoDateString}`);
-  return new Date(isoDateString);
 };
 
 const TodayView = () => {
+  // Apply React 18 compatibility fix for drag-and-drop
+  useDragDropFix();
+  
   const { categories } = useValhallaTaskContext();
   const { 
+    userId,
     scheduleEntries, 
     loadScheduleEntries, 
     loadScheduleEntriesRange,
@@ -139,7 +208,9 @@ const TodayView = () => {
     loadNotes,
     createNote,
     updateNote,
-    deleteNote
+    deleteNote,
+    tasks,
+    loadTasks
   } = useDb();
   
   // 状态
@@ -177,19 +248,128 @@ const TodayView = () => {
   const [notesLoading, setNotesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   
+  // 从数据库获取的任务模板
+  const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  
+  // 用户的任务
+  const [userTasks, setUserTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  
   // Force a rerender of the DragDropContext on mount to fix initialization issues
   useEffect(() => {
     resetServerContext();
     
-    // 加载今天的任务安排
+    console.log('TodayView component mounted, initializing data...');
+    console.log('DragDropContext initialized, handlers registered:');
+    console.log('- onDragStart:', handleDragStart);
+    console.log('- onDragEnd:', handleDragEnd);
+    
+    // Prevent native browser drag behavior to avoid interference with react-beautiful-dnd
+    const preventNativeDrag = (e: DragEvent) => {
+      e.preventDefault();
+      return false;
+    };
+    
+    // Add global dragstart listener to override native browser behavior
+    document.addEventListener('dragstart', preventNativeDrag);
+    
+    // Load today's schedule entries
     loadTodayScheduleEntries();
     
-    // 加载初始历史数据
+    // Load initial history data
     loadHistoryData();
     
-    // 加载笔记数据
+    // Load notes data
     loadNotesData();
+    
+    // Load task template data
+    loadTaskTemplates();
+    
+    // Load user tasks
+    loadUserTasks();
+    
+    // Clean up event listeners
+    return () => {
+      document.removeEventListener('dragstart', preventNativeDrag);
+    };
   }, []);
+  
+  // 当 userId 变化时重新加载任务和模板
+  useEffect(() => {
+    if (userId) {
+      console.log('User ID changed, reloading tasks and templates...');
+      loadTaskTemplates();
+      loadUserTasks();
+    }
+  }, [userId]);
+  
+  // 每当 userTasks 或 taskTemplates 改变时，打印日志以便调试
+  useEffect(() => {
+    console.log('User tasks updated:', userTasks);
+    console.log('Challenge tasks mapped:', challengeTasks);
+  }, [userTasks]);
+  
+  useEffect(() => {
+    console.log('Task templates updated:', taskTemplates);
+    console.log('Template tasks mapped:', templateTasks);
+  }, [taskTemplates]);
+  
+  // 加载用户任务
+  const loadUserTasks = async () => {
+    if (!userId) return;
+    
+    setLoadingTasks(true);
+    try {
+      // 直接从 Supabase 获取用户的任务，避免使用 DbContext 中的方法
+      console.log('Fetching tasks for user ID:', userId);
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId);
+        
+      if (error) {
+        console.error('Error fetching tasks from Supabase:', error);
+        throw error;
+      }
+      
+      console.log('Fetched tasks from Supabase:', data);
+      setUserTasks(data || []);
+    } catch (error) {
+      console.error('Error loading user tasks:', error);
+      // 如果直接获取失败，回退到使用 DbContext 中的方法
+      try {
+        await loadTasks();
+        console.log('Loaded tasks via DbContext:', tasks);
+        setUserTasks(tasks);
+      } catch (fallbackError) {
+        console.error('Fallback load method also failed:', fallbackError);
+      }
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+  
+  // 加载任务模板数据
+  const loadTaskTemplates = async () => {
+    if (!userId) return;
+    
+    setLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase
+        .from('task_templates')
+        .select('*')
+        .eq('user_id', userId);
+        
+      if (error) throw error;
+      console.log('Loaded task templates:', data);
+      setTaskTemplates(data || []);
+    } catch (error) {
+      console.error('Error loading task templates:', error);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
   
   // 从数据库加载今天的任务安排
   const loadTodayScheduleEntries = async () => {
@@ -400,13 +580,30 @@ const TodayView = () => {
         const dbNotes = notes.slice(0, 10).map(note => {
           console.log('Exception: 处理单个笔记:', note);
           
-          // 使用辅助函数正确处理日期，避免时区转换问题
-          const createdTime = correctUtcDate(note.created_at);
-          const updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+          // 安全地获取笔记ID
+          const noteId = note.note_id ? String(note.note_id) : String(Date.now());
           
-          // 创建UI需要的笔记对象格式
+          // 安全地处理日期
+          let createdTime, updatedTime;
+          
+          try {
+            // 尝试使用辅助函数处理日期，如果失败则使用当前时间
+            createdTime = note.created_at ? correctUtcDate(note.created_at) : new Date();
+            updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+            
+            // 再次验证日期是否有效
+            if (isNaN(createdTime.getTime())) createdTime = new Date();
+            if (isNaN(updatedTime.getTime())) updatedTime = createdTime;
+            
+          } catch (error) {
+            console.log('Exception: 日期解析失败，使用当前时间', error);
+            createdTime = new Date();
+            updatedTime = new Date();
+          }
+          
+          // 创建UI需要的笔记对象格式，确保所有字段都有合理的默认值
           const uiNote: Note = {
-            id: String(note.note_id), // 强制转换为字符串
+            id: noteId,
             content: note.content || '',
             createdAt: createdTime,
             updatedAt: updatedTime
@@ -417,7 +614,12 @@ const TodayView = () => {
         });
         
         // 确保笔记按照更新时间降序排列
-        dbNotes.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        dbNotes.sort((a, b) => {
+          // 防止异常：确保a.updatedAt和b.updatedAt是Date对象
+          const timeA = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+          const timeB = b.updatedAt instanceof Date ? b.updatedAt.getTime() : 0;
+          return timeB - timeA;
+        });
         
         console.log('Exception: 重置后的笔记数量:', dbNotes.length);
         console.log('Exception: 即将更新UI的笔记列表:', JSON.stringify(dbNotes));
@@ -430,12 +632,29 @@ const TodayView = () => {
         // 加载更多笔记（分页）
         const startIndex = (page - 1) * 10;
         const newNotes = notes.slice(startIndex, startIndex + 10).map(note => {
-          // 使用辅助函数正确处理日期，避免时区转换问题
-          const createdTime = correctUtcDate(note.created_at);
-          const updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+          // 安全地获取笔记ID
+          const noteId = note.note_id ? String(note.note_id) : String(Date.now());
+          
+          // 安全地处理日期
+          let createdTime, updatedTime;
+          
+          try {
+            // 使用辅助函数正确处理日期，避免时区转换问题
+            createdTime = note.created_at ? correctUtcDate(note.created_at) : new Date();
+            updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+            
+            // 验证日期是否有效
+            if (isNaN(createdTime.getTime())) createdTime = new Date();
+            if (isNaN(updatedTime.getTime())) updatedTime = createdTime;
+            
+          } catch (error) {
+            console.log('Exception: 日期解析失败，使用当前时间', error);
+            createdTime = new Date();
+            updatedTime = new Date();
+          }
           
           return {
-            id: String(note.note_id), // 强制转换为字符串
+            id: noteId,
             content: note.content || '',
             createdAt: createdTime,
             updatedAt: updatedTime
@@ -447,7 +666,12 @@ const TodayView = () => {
         setNotesState(prevNotes => {
           const updatedNotes = [...prevNotes, ...newNotes];
           // 确保所有笔记按照更新时间降序排列
-          updatedNotes.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+          updatedNotes.sort((a, b) => {
+            // 防止异常：确保a.updatedAt和b.updatedAt是Date对象
+            const timeA = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+            const timeB = b.updatedAt instanceof Date ? b.updatedAt.getTime() : 0;
+            return timeB - timeA;
+          });
           console.log('Exception: 更新后的全部笔记数量:', updatedNotes.length);
           return updatedNotes;
         });
@@ -470,10 +694,21 @@ const TodayView = () => {
   // 监听activeTab变化
   useEffect(() => {
     console.log('Exception: activeTab已变更为:', activeTab);
-    if (activeTab === 'notes') {
-      console.log('Exception: 切换到笔记标签，当前笔记数量:', notesState.length);
-      // 每次切换到笔记标签页时，重新加载笔记
-      loadNotesData(1, true);
+    
+    // 使用try-catch包裹标签切换逻辑，防止异常传播
+    try {
+      if (activeTab === 'notes') {
+        console.log('Exception: 切换到笔记标签，当前笔记数量:', notesState.length);
+        // 每次切换到笔记标签页时，重新加载笔记
+        loadNotesData(1, true);
+      } else if (activeTab === 'history') {
+        // 切换到历史标签时，确保历史数据已加载
+        if (taskHistory.length === 0) {
+          loadHistoryData();
+        }
+      }
+    } catch (error) {
+      console.error('标签页切换处理异常:', error);
     }
   }, [activeTab]);
   
@@ -623,12 +858,27 @@ const TodayView = () => {
   };
   
   // 获取支线任务和日常任务
-  const challengeTasks = categories.find(cat => cat.id === 'side')?.tasks || [];
-  const templateTasks = categories.find(cat => cat.id === 'daily')?.tasks || [];
+  // 改为使用用户的任务数据，而不是使用 ValhallaTaskContext 中的 challengeTasks
+  const challengeTasks = userTasks.map(task => ({
+    id: task.task_id?.toString() || '',
+    title: task.name || '',
+    description: task.description || '',
+    reward_points: task.reward_points || 0,
+    status: task.status
+  })).filter(task => !!task.id);
+  
+  // 使用数据库中的任务模板替代 ValhallaTaskContext 中的模板任务
+  const templateTasks = taskTemplates.map(template => ({
+    id: template.template_id?.toString() || '',
+    title: template.name || '',
+    description: template.description || '',
+    reward_points: template.default_points || 0
+  })).filter(task => !!task.id);
   
   // 安全地生成拖拽 ID
   const getSafeDraggableId = (prefix: string, id: string) => {
-    return `${prefix}-${id.replace(/^side-/, '')}`;
+    if (!id) return `${prefix}-unknown-${Date.now()}`;
+    return `${prefix}-${id}`;
   };
   
   // 启用编辑模式
@@ -808,6 +1058,7 @@ const TodayView = () => {
                   className={`flex flex-col gap-2 flex-1 min-h-[120px] ${
                     snapshot.isDraggingOver ? 'bg-accent-gold/10 border-2 border-dashed border-accent-gold/50 rounded-lg p-2' : ''
                   }`}
+                  data-is-droppable="true"
                 >
                   {tasksInSlot.map((task, index) => {
                     // 确保每个任务有唯一的ID
@@ -824,6 +1075,7 @@ const TodayView = () => {
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
+                              {...provided.dragHandleProps}
                               className={`
                                 group relative flex items-center w-full p-3 
                                 ${snapshot.isDragging ? 'bg-bg-panel/90 shadow-lg' : 'bg-black/70'} 
@@ -1015,11 +1267,17 @@ const TodayView = () => {
           {/* 确保遍历前笔记状态有效 */}
           {Array.isArray(notesState) && notesState.map((note) => {
             console.log('Exception: 渲染单个笔记:', note);
+            
+            // 确保note.updatedAt是Date对象，否则尝试转换
+            const updatedAt = note.updatedAt instanceof Date ? 
+              note.updatedAt : 
+              (typeof note.updatedAt === 'string' ? new Date(note.updatedAt) : new Date());
+            
             return (
               <div
                 key={note.id}
                 className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
-                onDoubleClick={() => startEditingNote(note)}
+                onDoubleClick={() => startEditingNote({...note, updatedAt, createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt || updatedAt)})}
               >
                 {editingNoteId === note.id ? (
                   <div className="flex flex-col relative">
@@ -1050,12 +1308,12 @@ const TodayView = () => {
                     <div className="whitespace-pre-wrap mb-2">{note.content}</div>
                     <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
                       <span>
-                        {`${note.updatedAt.getFullYear()}-${String(note.updatedAt.getMonth() + 1).padStart(2, '0')}-${String(note.updatedAt.getDate()).padStart(2, '0')} ${String(note.updatedAt.getHours()).padStart(2, '0')}:${String(note.updatedAt.getMinutes()).padStart(2, '0')}`}
+                        {`${updatedAt.getFullYear()}-${String(updatedAt.getMonth() + 1).padStart(2, '0')}-${String(updatedAt.getDate()).padStart(2, '0')} ${String(updatedAt.getHours()).padStart(2, '0')}:${String(updatedAt.getMinutes()).padStart(2, '0')}`}
                       </span>
                       <div>
                         <button 
                           className="text-accent-gold hover:text-accent-gold/80 mr-2"
-                          onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
+                          onClick={(e) => { e.stopPropagation(); startEditingNote({...note, updatedAt, createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt || updatedAt)}); }}
                         >
                           编辑
                         </button>
@@ -1102,66 +1360,122 @@ const TodayView = () => {
   
   // 处理任务拖拽结束
   const handleDragEnd = async (result: any) => {
-    const { source, destination } = result;
+    console.log('=============== DRAG END EVENT ===============');
+    console.log('Full drag result:', result);
+    
+    const { source, destination, draggableId } = result;
+    
+    // Debug information
+    console.log('Source:', source);
+    console.log('Destination:', destination);
+    console.log('DraggableId:', draggableId);
     
     // 如果没有目的地或者没有移动，则返回
     if (!destination || 
         (source.droppableId === destination.droppableId && 
          source.index === destination.index)) {
+      console.log('No destination or no movement, returning');
       return;
     }
-    
-    // 解析拖拽项ID - 从我们的复合ID中提取原始任务ID
-    const getOriginalTaskId = (draggableId: string) => {
-      const match = draggableId.match(/^task-(.+)-\w+$/);
-      return match ? match[1] : draggableId;
-    };
     
     // 从支线任务或模板任务列表拖到时间段
     if ((source.droppableId === 'challenges' || source.droppableId === 'templates') && 
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
       
-      const sourceList = source.droppableId === 'challenges' ? challengeTasks : templateTasks;
-      const taskToAdd = sourceList[source.index];
+      console.log('Dragging from challenge/template to time slot');
       
-      // 提取ID时去掉前缀
-      const draggableId = result.draggableId;
-      const prefix = source.droppableId === 'challenges' ? 'challenge-' : 'template-';
-      const taskId = draggableId.startsWith(prefix) ? draggableId.substring(prefix.length) : draggableId;
-      
-      // 找到对应原始任务
-      const originalTask = sourceList.find(t => t.id === taskId || t.id === `side-${taskId}`) || taskToAdd;
-      
-      // 获取当前系统时间（已经是UTC+8）
-      const now = new Date();
-      
-      // 直接构造日期字符串
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
-      
-      const taskSourceType = source.droppableId === 'challenges' ? 'challenge' : 'template';
-      
-      // 根据数据库模型创建适当的条目数据
-      const newEntryData = {
-        title: originalTask.title,
-        timeSlot: destination.droppableId as TimeSlot,
-        scheduled_date: dateStr,
-        source_type: taskSourceType as 'challenge' | 'template' | 'custom'
-      };
-      
-      // 根据源类型添加适当的ID字段
-      if (taskSourceType === 'challenge') {
-        Object.assign(newEntryData, { task_id: originalTask.id });
-      } else {
-        Object.assign(newEntryData, { template_id: originalTask.id });
+      try {
+        // 解析draggableId以获取原始ID
+        const idParts = draggableId.split('-');
+        const prefix = idParts[0]; // 'challenge' or 'template'
+        const originalId = idParts.slice(1).join('-'); // 重新连接，以防ID本身包含破折号
+        
+        console.log(`Parsed draggable ID: prefix=${prefix}, originalId=${originalId}`);
+        
+        // 获取源列表和任务索引
+        const sourceList = source.droppableId === 'challenges' ? challengeTasks : templateTasks;
+        const taskIndex = source.index;
+        
+        console.log('Source list:', sourceList);
+        console.log('Task index:', taskIndex);
+        
+        // 检查索引是否有效
+        if (taskIndex >= sourceList.length) {
+          console.error('Task index out of bounds:', taskIndex, 'list length:', sourceList.length);
+          return;
+        }
+        
+        // 获取要添加的任务
+        const task = sourceList[taskIndex];
+        
+        if (!task || !task.id) {
+          console.error('Invalid task:', task);
+          return;
+        }
+        
+        // 验证找到的任务ID与解析的ID是否匹配
+        if (task.id !== originalId) {
+          console.warn(`Task ID mismatch. Parsed ID: ${originalId}, Task ID: ${task.id}`);
+          // 继续使用索引找到的任务，而不是解析的ID
+        }
+        
+        console.log('Task to add:', task);
+        
+        // 获取当前日期
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        // 确定任务类型
+        const taskType = source.droppableId === 'challenges' ? 'challenge' : 'template';
+        
+        // 创建新的条目数据
+        const newEntry: Record<string, any> = {
+          // UI字段
+          title: task.title,
+          timeSlot: destination.droppableId as TimeSlot,
+          scheduled_date: dateStr,
+          source_type: taskType,
+          
+          // 数据库字段
+          custom_name: task.title,
+          description: task.description || '', // 将custom_desc改为description
+          reward_points: task.reward_points || 0,
+          slot: destination.droppableId,
+          date: dateStr,
+          task_type: taskType,
+          status: 'ongoing'
+        };
+        
+        // 添加ID字段
+        if (taskType === 'challenge') {
+          const taskId = parseInt(task.id);
+          if (isNaN(taskId)) {
+            console.error('Invalid task ID for conversion to number:', task.id);
+            return;
+          }
+          newEntry.task_id = taskId;
+          newEntry.ref_task_id = taskId;
+        } else {
+          const templateId = parseInt(task.id);
+          if (isNaN(templateId)) {
+            console.error('Invalid template ID for conversion to number:', task.id);
+            return;
+          }
+          newEntry.template_id = templateId;
+          newEntry.ref_template_id = templateId;
+        }
+        
+        console.log('Creating schedule entry with data:', newEntry);
+        
+        const result = await createScheduleEntry(newEntry);
+        console.log('Create result:', result);
+        
+        // 重新加载今天的任务
+        await loadTodayScheduleEntries();
+        
+      } catch (error) {
+        console.error('Error in drag-and-drop operation:', error);
       }
-      
-      await createScheduleEntry(newEntryData);
-      
-      // 重新加载今天的任务
-      await loadTodayScheduleEntries();
       return;
     }
     
@@ -1169,48 +1483,79 @@ const TodayView = () => {
     if (['morning', 'afternoon', 'evening'].includes(source.droppableId) &&
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
       
-      // 找出要移动的任务
-      const sourceSlot = source.droppableId as TimeSlot;
-      const destSlot = destination.droppableId as TimeSlot;
-      
-      // 获取当前的临时排序状态
-      const currentOrder = { ...temporaryTaskOrder };
-      
-      // 提取原始任务ID
-      const originalTaskId = getOriginalTaskId(result.draggableId);
-      
-      // 根据临时排序获取对应的任务ID
-      const taskIdToMove = currentOrder[sourceSlot][source.index];
-      
-      // 从源位置移除
-      currentOrder[sourceSlot] = currentOrder[sourceSlot].filter(id => id !== taskIdToMove);
-      
-      if (sourceSlot === destSlot) {
-        // 在同一时间段内重新排序 - 只更新临时状态
+      try {
+        // 找出要移动的任务
+        const sourceSlot = source.droppableId as TimeSlot;
+        const destSlot = destination.droppableId as TimeSlot;
         
-        // 在正确的位置插入
-        const newOrder = [...currentOrder[destSlot]];
-        newOrder.splice(destination.index, 0, taskIdToMove);
-        currentOrder[destSlot] = newOrder;
+        // 获取当前的临时排序状态
+        const currentOrder = { ...temporaryTaskOrder };
         
-        // 仅更新临时排序状态
-        setTemporaryTaskOrder(currentOrder);
-      } else {
-        // 在不同时间段之间移动 - 更新任务的时间段属性并保存到数据库
+        // 根据临时排序获取对应的任务ID
+        if (!currentOrder[sourceSlot] || source.index >= currentOrder[sourceSlot].length) {
+          console.error('Invalid source index or missing task order');
+          return;
+        }
         
-        // 直接在目标位置插入
-        const newOrder = [...currentOrder[destSlot]];
-        newOrder.splice(destination.index, 0, taskIdToMove);
-        currentOrder[destSlot] = newOrder;
+        const taskIdToMove = currentOrder[sourceSlot][source.index];
         
-        setTemporaryTaskOrder(currentOrder);
+        console.log('Moving task:', { 
+          sourceSlot, 
+          destSlot, 
+          taskIdToMove,
+          currentOrder
+        });
         
-        // 如果时间段发生了变化，更新数据库
-        await moveTaskBetweenSlots(taskIdToMove, destSlot);
+        // 从源位置移除
+        currentOrder[sourceSlot] = currentOrder[sourceSlot].filter(id => id !== taskIdToMove);
+        
+        if (sourceSlot === destSlot) {
+          // 在同一时间段内重新排序 - 只更新临时状态
+          
+          // 在正确的位置插入
+          const newOrder = [...currentOrder[destSlot]];
+          newOrder.splice(destination.index, 0, taskIdToMove);
+          currentOrder[destSlot] = newOrder;
+          
+          // 仅更新临时排序状态
+          setTemporaryTaskOrder(currentOrder);
+        } else {
+          // 在不同时间段之间移动 - 更新任务的时间段属性并保存到数据库
+          
+          // 直接在目标位置插入
+          const newOrder = [...currentOrder[destSlot]];
+          newOrder.splice(destination.index, 0, taskIdToMove);
+          currentOrder[destSlot] = newOrder;
+          
+          setTemporaryTaskOrder(currentOrder);
+          
+          // 如果时间段发生了变化，更新数据库
+          await moveTaskBetweenSlots(taskIdToMove, destSlot);
+        }
+      } catch (error) {
+        console.error('Error moving task between slots:', error);
       }
     }
   };
   
+  // 处理拖拽开始
+  const handleDragStart = (start: any) => {
+    console.log('%c拖拽开始 - Drag Start', 'background: #ffa500; color: #fff; padding: 2px 5px; border-radius: 3px;', {
+      draggableId: start.draggableId,
+      source: start.source,
+      type: start.type,
+      mode: start.mode
+    });
+  };
+
+  // 添加一个简单的点击测试函数到每个挑战和模板任务
+  const handleTaskClick = (type: string, id: string) => {
+    console.log(`%c点击${type}任务 - Click ${type} task`, 'background: #4caf50; color: #fff; padding: 2px 5px; border-radius: 3px;', {
+      type,
+      id
+    });
+  };
+
   // 添加测试笔记
   const addTestNote = () => {
     // 添加测试笔记
@@ -1230,9 +1575,12 @@ const TodayView = () => {
         console.error('创建测试笔记失败:', error);
       });
   };
-  
+
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
+    <DragDropContext 
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
       <div className="flex flex-col gap-6 pb-40 hide-scrollbar">
         {/* 上方时间段和任务源区域 */}
         <div className="flex gap-6 min-h-[400px]">
@@ -1261,7 +1609,7 @@ const TodayView = () => {
               </div>
               <div className={`flex-1 ${challengesCollapsed ? 'hidden' : 'block'}`}>
                 <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2">
-                  <h3 className="font-display text-lg text-text-primary">
+                  <h3 className="font-display text-lg text-accent-gold">
                     支线任务
                   </h3>
                   <button 
@@ -1281,28 +1629,45 @@ const TodayView = () => {
                       {...provided.droppableProps}
                       className="space-y-2 p-1"
                     >
-                      {challengeTasks.filter(task => task && task.id).map((task, index) => (
-                        <Draggable key={getSafeDraggableId('challenge', task.id)} draggableId={getSafeDraggableId('challenge', task.id)} index={index}>
-                          {(provided: any, snapshot: any) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
-                            >
-                              {snapshot.isDragging && (
-                                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
-                                  拖拽到时间段
+                      {loadingTasks ? (
+                        <div className="text-center py-4">
+                          <p className="text-accent-gold">加载任务中...</p>
+                        </div>
+                      ) : challengeTasks.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-text-secondary">暂无支线任务</p>
+                        </div>
+                      ) : (
+                        challengeTasks.filter(task => task && task.id).map((task, index) => (
+                          <Draggable key={getSafeDraggableId('challenge', task.id)} draggableId={getSafeDraggableId('challenge', task.id)} index={index}>
+                            {(provided: any, snapshot: any) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center`}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  zIndex: snapshot.isDragging ? 9999 : 50
+                                }}
+                              >
+                                <div className="flex-1 font-semibold">{task.title}</div>
+                                <div 
+                                  className="ml-2 opacity-50 group-hover:opacity-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTaskClick('挑战', task.id);
+                                  }}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                  </svg>
                                 </div>
-                              )}
-                              <div className="font-semibold">{task.title}</div>
-                              <div className="text-xs text-text-secondary">
-                                Rewards: {task.reward_points}
                               </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
+                            )}
+                          </Draggable>
+                        ))
+                      )}
                       {provided.placeholder}
                     </div>
                   )}
@@ -1328,7 +1693,7 @@ const TodayView = () => {
               </div>
               <div className={`flex-1 ${templatesCollapsed ? 'hidden' : 'block'}`}>
                 <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2">
-                  <h3 className="font-display text-lg text-text-primary">
+                  <h3 className="font-display text-lg text-accent-gold">
                     日常任务
                   </h3>
                   <button 
@@ -1348,28 +1713,45 @@ const TodayView = () => {
                       {...provided.droppableProps}
                       className="space-y-2 p-1"
                     >
-                      {templateTasks.filter(task => task && task.id).map((task, index) => (
-                        <Draggable key={getSafeDraggableId('template', task.id)} draggableId={getSafeDraggableId('template', task.id)} index={index}>
-                          {(provided: any, snapshot: any) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold`}
-                            >
-                              {snapshot.isDragging && (
-                                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-accent-gold whitespace-nowrap">
-                                  拖拽到时间段
+                      {loadingTemplates ? (
+                        <div className="text-center py-4">
+                          <p className="text-accent-gold">加载任务模板中...</p>
+                        </div>
+                      ) : templateTasks.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-text-secondary">暂无日常任务模板</p>
+                        </div>
+                      ) : (
+                        templateTasks.filter(task => task && task.id).map((task, index) => (
+                          <Draggable key={getSafeDraggableId('template', task.id)} draggableId={getSafeDraggableId('template', task.id)} index={index}>
+                            {(provided: any, snapshot: any) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center`}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  zIndex: snapshot.isDragging ? 9999 : 50
+                                }}
+                              >
+                                <div className="flex-1 font-semibold">{task.title}</div>
+                                <div 
+                                  className="ml-2 opacity-50 group-hover:opacity-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTaskClick('模板', task.id);
+                                  }}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                  </svg>
                                 </div>
-                              )}
-                              <div className="font-semibold">{task.title}</div>
-                              <div className="text-xs text-text-secondary">
-                                Rewards: {task.reward_points}
                               </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
+                            )}
+                          </Draggable>
+                        ))
+                      )}
                       {provided.placeholder}
                     </div>
                   )}
@@ -1407,4 +1789,4 @@ const TodayView = () => {
   );
 };
 
-export default TodayView; 
+export default TodayView;

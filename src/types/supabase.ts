@@ -52,7 +52,7 @@ export interface ScheduleEntry {
   ref_task_id?: number;    // 关联的任务ID
   ref_template_id?: number; // 关联的模板ID
   custom_name?: string;    // 自定义任务名称
-  custom_desc?: string;    // 自定义任务描述
+  description?: string;    // 自定义任务描述
   reward_points: number;   // 奖励积分
   created_at: string;      // 创建时间
 }

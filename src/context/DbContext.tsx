@@ -141,6 +141,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     
     setLoading(true);
     try {
+      // Make sure the operation completes before returning
       await taskService.update(taskId, data, userId);
       await loadTasks();
       return true;
@@ -157,6 +158,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     
     setLoading(true);
     try {
+      // Make sure the operation completes before returning
       await taskService.delete(taskId, userId);
       await loadTasks();
       return true;
@@ -335,8 +337,8 @@ export function DbProvider({ children }: { children: ReactNode }) {
           status: 'ongoing' as 'ongoing' | 'completed' | 'deleted',
           ref_task_id: data.task_id ? parseInt(data.task_id) : undefined,
           ref_template_id: data.template_id ? parseInt(data.template_id) : undefined,
-          custom_desc: '',
-          reward_points: 0
+          description: data.description || data.custom_desc || '', // 使用description字段
+          reward_points: data.reward_points || 0
         };
         
         // 准备数据并转换为 Supabase 格式
@@ -350,7 +352,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
           ref_task_id: dbFormatEntry.ref_task_id,
           ref_template_id: dbFormatEntry.ref_template_id,
           custom_name: dbFormatEntry.custom_name,
-          custom_desc: dbFormatEntry.custom_desc,
+          description: dbFormatEntry.description, // 使用description字段
           reward_points: dbFormatEntry.reward_points
         };
         
@@ -400,8 +402,8 @@ export function DbProvider({ children }: { children: ReactNode }) {
         task_type: data.source_type,
         status: 'ongoing' as 'ongoing' | 'completed' | 'deleted',
         custom_name: data.title,
-        custom_desc: '',
-        reward_points: 0,
+        description: data.description || data.custom_desc || '', // 使用description字段
+        reward_points: data.reward_points || 0,
         user_id: parseInt(userId)
       };
       
@@ -439,6 +441,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         // 使用 Supabase API 更新数据
         await supabaseApi.schedules.update(entryIdNum, supabaseUpdateData, userIdNum);
         console.log('Supabase entry updated');
+        // Make sure loadScheduleEntries completes before returning
         await loadScheduleEntries();
         return true;
       } catch (supabaseError) {
@@ -447,6 +450,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
       
       // 回退到本地数据库
       await scheduleService.update(entryId, data, userId);
+      // Make sure loadScheduleEntries completes before returning
       await loadScheduleEntries();
       return true;
     } catch (error) {
@@ -475,6 +479,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         // 使用 Supabase API 删除数据
         await supabaseApi.schedules.delete(entryIdNum, userIdNum);
         console.log('Supabase entry deleted');
+        // Make sure loadScheduleEntries completes before returning
         await loadScheduleEntries();
         return true;
       } catch (supabaseError) {
@@ -483,6 +488,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
       
       // 回退到本地数据库
       await scheduleService.delete(entryId, userId);
+      // Make sure loadScheduleEntries completes before returning
       await loadScheduleEntries();
       return true;
     } catch (error) {
@@ -641,6 +647,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('Exception: Note updated successfully');
+        // Make sure loadNotes completes before returning
         await loadNotes(); // Refresh the notes list
         return true;
       } catch (supabaseError) {
@@ -650,6 +657,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
       // Fall back to noteService
       await noteService.update(noteId, content, userId);
       console.log('Exception: Note updated via noteService');
+      // Make sure loadNotes completes before returning
       await loadNotes();
       return true;
     } catch (error) {
@@ -691,6 +699,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('Exception: Note deleted successfully');
+        // Make sure loadNotes completes before returning
         await loadNotes(); // Refresh the notes list
         return true;
       } catch (supabaseError) {
@@ -700,6 +709,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
       // Fall back to noteService
       await noteService.delete(noteId, userId);
       console.log('Exception: Note deleted via noteService');
+      // Make sure loadNotes completes before returning
       await loadNotes();
       return true;
     } catch (error) {
