@@ -29,7 +29,7 @@ const CompletionIcon = () => (
 );
 
 const TasksView = () => {
-  const { tasks, loadTasks, updateTask, deleteTask } = useDb();
+  const { tasks, loadTasks, updateTask, deleteTask, createTask } = useDb();
   
   // State for UI management
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -236,12 +236,15 @@ const TasksView = () => {
   
   // Function to determine priority colors
   const getPriorityColor = (index: number, priority: number) => {
-    if (index < priority && index < 3) {
-      // Priority levels filled - using cooler tones (up to 3 visual indicators)
+    if (index < priority && index < 6) {
+      // Priority levels filled - using warm tones with distinct gradients
       return [
-        'bg-sky-400/80', // Priority 1
-        'bg-teal-400/80', // Priority 2
-        'bg-cyan-400/80', // Priority 3
+        'bg-amber-300', // Priority 1 - 淡黄色
+        'bg-orange-400', // Priority 2 - 橙色
+        'bg-rose-400', // Priority 3 - 玫瑰色
+        'bg-red-500', // Priority 4 - 鲜红色
+        'bg-red-600', // Priority 5 - 深红色
+        'bg-red-700', // Priority 6 - 暗红色
       ][index] || 'bg-accent-gold';
     }
     
@@ -258,12 +261,63 @@ const TasksView = () => {
     }));
   };
   
+  // 创建新任务的处理函数
+  const handleCreateTask = async () => {
+    setIsUpdating(true);
+    try {
+      const newTask = await createTask({
+        name: '新任务',
+        description: '',
+        priority: 1,
+        status: 'ongoing',
+        reward_points: 10
+      });
+      
+      if (newTask) {
+        await loadTasks();
+        setSelectedTask(newTask);
+      }
+    } catch (error) {
+      console.error('创建任务失败:', error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+  
   return (
     <div className="flex flex-col h-[calc(100vh-200px)]">
       <div className="flex gap-6 flex-1 overflow-hidden">
         {/* Left Column - Task List */}
         <div className="w-64 valhalla-panel overflow-auto">
           <div className="space-y-3 p-1">
+            {/* 新建任务按钮 */}
+            <motion.div
+              whileHover={{ x: 3 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleCreateTask}
+              className="p-3 cursor-pointer rounded-lg transition-all relative hover:bg-amber-100/70 text-slate-800 bg-amber-50/90 border border-amber-200/80 shadow-sm"
+            >
+              <div className="flex justify-between items-start">
+                <span className="font-semibold line-clamp-2 flex-1 flex items-center">
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    className="h-4 w-4 mr-2 text-amber-700" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M12 4v16m8-8H4" 
+                    />
+                  </svg>
+                  新建任务
+                </span>
+              </div>
+            </motion.div>
+            
             {challengeTasks.map(task => (
               <motion.div
                 key={task.task_id}
@@ -288,19 +342,33 @@ const TasksView = () => {
                     {task.name}
                   </span>
                   <div 
-                    className="flex cursor-pointer ml-2 flex-shrink-0 mt-1"
+                    className="flex flex-col cursor-pointer ml-2 flex-shrink-0 mt-1 gap-1"
                     onClick={(e) => increasePriority(task.task_id.toString(), e)}
                   >
-                    {[...Array(3)].map((_, i) => (
-                      <div 
-                        key={i} 
-                        className={`w-2.5 h-2.5 mx-0.5 rounded-sm ${
-                          getPriorityColor(i, task.priority)
-                        } flex items-center justify-center text-[6px]`}
-                      >
-                        {i === 2 && task.priority > 3 && "+"}
-                      </div>
-                    ))}
+                    {/* 第一行三个指示器 */}
+                    <div className="flex">
+                      {[...Array(3)].map((_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-2.5 h-2.5 mx-0.5 rounded-sm ${
+                            getPriorityColor(i, task.priority)
+                          } flex items-center justify-center text-[6px]`}
+                        />
+                      ))}
+                    </div>
+                    {/* 第二行三个指示器 */}
+                    <div className="flex">
+                      {[...Array(3)].map((_, i) => (
+                        <div 
+                          key={i+3} 
+                          className={`w-2.5 h-2.5 mx-0.5 rounded-sm ${
+                            getPriorityColor(i+3, task.priority)
+                          } flex items-center justify-center text-[6px]`}
+                        >
+                          {i === 2 && task.priority > 6 && "+"}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </motion.div>
