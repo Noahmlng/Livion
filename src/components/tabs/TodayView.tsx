@@ -674,41 +674,73 @@ const TodayView = () => {
         // 使用回调形式的setState来确保是最新状态
         setNotesState(dbNotes);
         
-        setHasMoreNotes(notes.length > 10);
+        // 设置hasMoreNotes
+        const hasMore = notes.length > 10;
+        console.log('Exception: 设置是否有更多笔记(hasMoreNotes):', hasMore, '(总数:', notes.length, ')');
+        setHasMoreNotes(hasMore);
       } else {
         // 加载更多笔记（分页）
         const startIndex = (page - 1) * 10;
-        const newNotes = notes.slice(startIndex, startIndex + 10).map(note => {
-          // 安全地获取笔记ID
-          const noteId = note.note_id ? String(note.note_id) : String(Date.now());
-          
-          // 安全地处理日期
-          let createdTime, updatedTime;
-          
-          try {
-            // 使用辅助函数正确处理日期，避免时区转换问题
-            createdTime = note.created_at ? correctUtcDate(note.created_at) : new Date();
-            updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
-            
-            // 验证日期是否有效
-            if (isNaN(createdTime.getTime())) createdTime = new Date();
-            if (isNaN(updatedTime.getTime())) updatedTime = createdTime;
-            
-          } catch (error) {
-            console.log('Exception: 日期解析失败，使用当前时间', error);
-            createdTime = new Date();
-            updatedTime = new Date();
-          }
-          
-          return {
-            id: noteId,
-            content: note.content || '',
-            createdAt: createdTime,
-            updatedAt: updatedTime
-          };
-        });
+        console.log(`Exception: 加载更多笔记，页码=${page}, 起始索引=${startIndex}, 总笔记数=${notes.length}`);
         
-        console.log('Exception: 加载更多笔记 - 新增数量:', newNotes.length);
+        if (startIndex >= notes.length) {
+          console.log('Exception: 没有更多笔记可加载');
+          setHasMoreNotes(false);
+          setNotesLoading(false);
+          return;
+        }
+        
+        // 获取当前已加载的笔记ID列表，用于去重
+        const existingNoteIds = new Set(notesState.map(note => note.id));
+        console.log('Exception: 已有笔记ID:', Array.from(existingNoteIds));
+        
+        const newNotes = notes.slice(startIndex, startIndex + 10)
+          .map(note => {
+            // 安全地获取笔记ID
+            const noteId = note.note_id ? String(note.note_id) : String(Date.now());
+            
+            // 如果ID已存在，跳过这条笔记
+            if (existingNoteIds.has(noteId)) {
+              console.log('Exception: 跳过重复笔记:', noteId);
+              return null;
+            }
+            
+            // 安全地处理日期
+            let createdTime, updatedTime;
+            
+            try {
+              // 使用辅助函数正确处理日期，避免时区转换问题
+              createdTime = note.created_at ? correctUtcDate(note.created_at) : new Date();
+              updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+              
+              // 验证日期是否有效
+              if (isNaN(createdTime.getTime())) createdTime = new Date();
+              if (isNaN(updatedTime.getTime())) updatedTime = createdTime;
+              
+            } catch (error) {
+              console.log('Exception: 日期解析失败，使用当前时间', error);
+              createdTime = new Date();
+              updatedTime = new Date();
+            }
+            
+            return {
+              id: noteId,
+              content: note.content || '',
+              createdAt: createdTime,
+              updatedAt: updatedTime
+            };
+          })
+          .filter(note => note !== null) as Note[]; // 过滤掉空值
+        
+        console.log('Exception: 加载更多笔记 - 新增数量(去重后):', newNotes.length);
+        
+        if (newNotes.length === 0) {
+          // 如果所有都是重复的，可能已经没有更多可加载的
+          console.log('Exception: 没有新的笔记可加载');
+          setHasMoreNotes(false);
+          setNotesLoading(false);
+          return;
+        }
         
         setNotesState(prevNotes => {
           const updatedNotes = [...prevNotes, ...newNotes];
@@ -747,6 +779,8 @@ const TodayView = () => {
       if (activeTab === 'notes') {
         console.log('Exception: 切换到笔记标签，当前笔记数量:', notesState.length);
         // 每次切换到笔记标签页时，重新加载笔记
+        setNotesPage(1); // 重置页码
+        setHasMoreNotes(true); // 重置加载更多状态
         loadNotesData(1, true);
       } else if (activeTab === 'history') {
         // 切换到历史标签时，确保历史数据已加载
@@ -759,37 +793,52 @@ const TodayView = () => {
     }
   }, [activeTab]);
   
-  // 加载更多笔记
-  const loadMoreNotes = () => {
-    const nextPage = notesPage + 1;
-    setNotesPage(nextPage);
-    loadNotesData(nextPage, false);
-  };
-  
-  // 监听笔记容器的滚动
+  // 监听全局滚动事件，检测到底部时加载更多笔记
   useEffect(() => {
-    const handleScroll = () => {
-      if (noteContainerRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = noteContainerRef.current;
-        
-        // 滚动到底部时加载更多
-        if (scrollTop + clientHeight >= scrollHeight - 50 && hasMoreNotes && !notesLoading) {
-          loadMoreNotes();
-        }
+    // 只在笔记标签页激活时添加监听
+    if (activeTab !== 'notes' || !hasMoreNotes) return;
+
+    // 全局滚动事件处理函数
+    const handleGlobalScroll = () => {
+      // 计算滚动位置
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+      
+      console.log('Exception: 全局滚动检测:', {
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        distanceToBottom: scrollHeight - scrollTop - clientHeight
+      });
+      
+      // 当距离底部150px以内时加载更多
+      if (scrollHeight - scrollTop - clientHeight < 150 && !notesLoading && hasMoreNotes) {
+        console.log('Exception: 滚动接近底部，自动加载更多笔记');
+        const nextPage = notesPage + 1;
+        setNotesPage(nextPage);
+        loadNotesData(nextPage, false);
       }
     };
     
-    const container = noteContainerRef.current;
-    if (container && activeTab === 'notes') {
-      container.addEventListener('scroll', handleScroll);
-    }
+    // 添加滚动事件监听
+    window.addEventListener('scroll', handleGlobalScroll);
     
+    // 清理函数
     return () => {
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
+      window.removeEventListener('scroll', handleGlobalScroll);
     };
-  }, [notesState, hasMoreNotes, notesLoading, activeTab, notesPage]);
+  }, [activeTab, notesPage, hasMoreNotes, notesLoading]);
+  
+  // 点击加载更多笔记
+  const handleLoadMoreClick = () => {
+    if (!notesLoading && hasMoreNotes) {
+      console.log('Exception: 点击加载更多按钮');
+      const nextPage = notesPage + 1;
+      setNotesPage(nextPage);
+      loadNotesData(nextPage, false);
+    }
+  };
   
   // 创建新笔记
   const createNewNote = async () => {
@@ -1275,125 +1324,20 @@ const TodayView = () => {
   };
   
   // 渲染笔记标签页内容
+  // 已经不再需要这个函数，笔记内容直接渲染在主布局中
+  /*
   const renderNotesTab = () => {
     console.log('Exception: 渲染笔记标签页, 当前笔记数量:', notesState.length);
     
     return (
       <div 
-        className="flex flex-col p-4"
+        className="flex flex-col p-4 h-full"
       >
-        {/* 新建笔记区域 - 简化版 */}
-        <div className="mb-4">
-          <div className="flex flex-col relative">
-            <textarea
-              className="w-full p-3 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
-              placeholder="记录你的想法和灵感..."
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && createNewNote()}
-            />
-            <button 
-              className="absolute bottom-3 right-3 text-accent-gold/80 hover:text-accent-gold"
-              onClick={createNewNote}
-              title="保存笔记 (Ctrl + Enter)"
-            >
-              {/* 纸飞机图标 - 顺时针旋转90度 */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        
-        {/* 笔记列表 */}
-        <div 
-          ref={noteContainerRef}
-          className="overflow-y-auto flex-1 hide-scrollbar space-y-3"
-          style={{ minHeight: '100px' }}
-        >
-          {/* 确保遍历前笔记状态有效 */}
-          {Array.isArray(notesState) && notesState.map((note) => {
-            console.log('Exception: 渲染单个笔记:', note);
-            
-            // 确保note.updatedAt是Date对象，否则尝试转换
-            const updatedAt = note.updatedAt instanceof Date ? 
-              note.updatedAt : 
-              (typeof note.updatedAt === 'string' ? new Date(note.updatedAt) : new Date());
-            
-            return (
-              <div
-                key={note.id}
-                className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
-                onDoubleClick={() => startEditingNote({...note, updatedAt, createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt || updatedAt)})}
-              >
-                {editingNoteId === note.id ? (
-                  <div className="flex flex-col relative">
-                    <textarea
-                      ref={noteTextareaRef}
-                      className="w-full p-2 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
-                      value={editingNoteContent}
-                      onChange={(e) => setEditingNoteContent(e.target.value)}
-                      onKeyDown={handleNoteKeyDown}
-                    />
-                    <div className="flex justify-end mt-2">
-                      <button 
-                        className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
-                        onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
-                      >
-                        取消
-                      </button>
-                      <button 
-                        className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
-                        onClick={saveEditedNote}
-                      >
-                        保存
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="whitespace-pre-wrap mb-2">{note.content}</div>
-                    <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
-                      <span>
-                        {`${updatedAt.getFullYear()}-${String(updatedAt.getMonth() + 1).padStart(2, '0')}-${String(updatedAt.getDate()).padStart(2, '0')} ${String(updatedAt.getHours()).padStart(2, '0')}:${String(updatedAt.getMinutes()).padStart(2, '0')}`}
-                      </span>
-                      <div>
-                        <button 
-                          className="text-accent-gold hover:text-accent-gold/80 mr-2"
-                          onClick={(e) => { e.stopPropagation(); startEditingNote({...note, updatedAt, createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt || updatedAt)}); }}
-                        >
-                          编辑
-                        </button>
-                        <button 
-                          className="text-red-500 hover:text-red-400"
-                          onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-          
-          {notesLoading && (
-            <div className="text-center py-4">
-              <p className="text-accent-gold">加载更多笔记中...</p>
-            </div>
-          )}
-          
-          {!notesLoading && notesState.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-text-secondary text-lg">暂无笔记</p>
-              <p className="text-text-secondary text-sm mt-2">点击上方输入框输入并创建新笔记</p>
-            </div>
-          )}
-        </div>
+        // ... 原有内容已移动到主布局中
       </div>
     );
   };
+  */
   
   // 切换支线任务折叠状态
   const toggleChallengesCollapse = () => {
@@ -1510,6 +1454,14 @@ const TodayView = () => {
           }
           newEntry.template_id = templateId;
           newEntry.ref_template_id = templateId;
+          
+          // 对于模板任务，确保正确获取和设置奖励点数和描述
+          // 查找完整的模板信息
+          const templateInfo = taskTemplates.find(t => t.template_id.toString() === task.id);
+          if (templateInfo) {
+            newEntry.reward_points = templateInfo.default_points || 0;
+            newEntry.description = templateInfo.description || '';
+          }
         }
         
         console.log('Creating schedule entry with data:', newEntry);
@@ -1628,7 +1580,9 @@ const TodayView = () => {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col gap-6 pb-40 hide-scrollbar">
+      <div 
+        className="flex flex-col gap-6 pb-40 hide-scrollbar"
+      >
         {/* 上方时间段和任务源区域 */}
         <div className="flex gap-6 min-h-[400px]">
           {/* 左侧三个时间段 */}
@@ -1808,29 +1762,146 @@ const TodayView = () => {
           </div>
         </div>
         
-        {/* 下方历史和笔记标签页 */}
-        <div className="valhalla-panel overflow-hidden mt-2 flex flex-col">
-          {/* 标签页切换 */}
-          <div className="flex border-b border-border-metal">
-            <button
-              className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
-              onClick={() => setActiveTab('history')}
-            >
-              历史记录
-            </button>
-            <button
-              className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
-              onClick={() => setActiveTab('notes')}
-            >
-              笔记
-            </button>
-          </div>
-          
-          {/* 标签页内容 */}
-          <div className="flex-1 overflow-auto hide-scrollbar h-full" style={{ minHeight: '450px' }}>
-            {activeTab === 'history' ? renderHistoryTab() : renderNotesTab()}
-          </div>
+        {/* 标签选择器 */}
+        <div className="flex border-b border-border-metal mt-2">
+          <button
+            className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
+            onClick={() => setActiveTab('history')}
+          >
+            历史记录
+          </button>
+          <button
+            className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
+            onClick={() => setActiveTab('notes')}
+          >
+            笔记
+          </button>
         </div>
+        
+        {/* 标签页内容 - 不再有外框限制 */}
+        {activeTab === 'history' ? (
+          <div className="valhalla-panel overflow-hidden flex flex-col">
+            {renderHistoryTab()}
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {/* 新建笔记区域 */}
+            <div className="mb-4 flex-shrink-0 bg-bg-panel p-4 rounded-md border border-border-metal">
+              <div className="flex flex-col relative">
+                <textarea
+                  className="w-full p-3 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
+                  placeholder="记录你的想法和灵感..."
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && createNewNote()}
+                />
+                <button 
+                  className="absolute bottom-3 right-3 text-accent-gold/80 hover:text-accent-gold"
+                  onClick={createNewNote}
+                  title="保存笔记 (Ctrl + Enter)"
+                >
+                  {/* 纸飞机图标 - 顺时针旋转90度 */}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* 笔记列表 - 直接在主滚动区域内，没有外框限制 */}
+            <div className="space-y-3" ref={noteContainerRef}>
+              {/* 确保遍历前笔记状态有效 */}
+              {Array.isArray(notesState) && notesState.map((note) => {
+                console.log('Exception: 渲染单个笔记:', note);
+                
+                // 确保note.updatedAt是Date对象，否则尝试转换
+                const updatedAt = note.updatedAt instanceof Date ? 
+                  note.updatedAt : 
+                  (typeof note.updatedAt === 'string' ? new Date(note.updatedAt) : new Date());
+                
+                return (
+                  <div
+                    key={note.id}
+                    className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
+                    onDoubleClick={() => startEditingNote({...note, updatedAt, createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt || updatedAt)})}
+                  >
+                    {editingNoteId === note.id ? (
+                      <div className="flex flex-col relative">
+                        <textarea
+                          ref={noteTextareaRef}
+                          className="w-full p-2 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
+                          value={editingNoteContent}
+                          onChange={(e) => setEditingNoteContent(e.target.value)}
+                          onKeyDown={handleNoteKeyDown}
+                        />
+                        <div className="flex justify-end mt-2">
+                          <button 
+                            className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
+                            onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
+                          >
+                            取消
+                          </button>
+                          <button 
+                            className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
+                            onClick={saveEditedNote}
+                          >
+                            保存
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="whitespace-pre-wrap mb-2">{note.content}</div>
+                        <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
+                          <span>
+                            {`${updatedAt.getFullYear()}-${String(updatedAt.getMonth() + 1).padStart(2, '0')}-${String(updatedAt.getDate()).padStart(2, '0')} ${String(updatedAt.getHours()).padStart(2, '0')}:${String(updatedAt.getMinutes()).padStart(2, '0')}`}
+                          </span>
+                          <div>
+                            <button 
+                              className="text-accent-gold hover:text-accent-gold/80 mr-2"
+                              onClick={(e) => { e.stopPropagation(); startEditingNote({...note, updatedAt, createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt || updatedAt)}); }}
+                            >
+                              编辑
+                            </button>
+                            <button 
+                              className="text-red-500 hover:text-red-400"
+                              onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              
+              {notesLoading && (
+                <div className="text-center py-4 bg-bg-panel rounded-md border border-border-metal">
+                  <p className="text-accent-gold">加载更多笔记中...</p>
+                </div>
+              )}
+              
+              {!notesLoading && notesState.length === 0 && (
+                <div className="text-center py-8 bg-bg-panel rounded-md border border-border-metal">
+                  <p className="text-text-secondary text-lg">暂无笔记</p>
+                  <p className="text-text-secondary text-sm mt-2">点击上方输入框输入并创建新笔记</p>
+                </div>
+              )}
+              
+              {/* 触发加载更多的元素 */}
+              {hasMoreNotes && (
+                <div 
+                  className="py-2 text-center cursor-pointer hover:bg-bg-panel hover:text-accent-gold rounded-md border border-border-metal"
+                  onClick={handleLoadMoreClick}
+                >
+                  点击加载更多笔记
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </DragDropContext>
   );
