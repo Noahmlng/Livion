@@ -441,6 +441,34 @@ export function DbProvider({ children }: { children: ReactNode }) {
         // 使用 Supabase API 更新数据
         await supabaseApi.schedules.update(entryIdNum, supabaseUpdateData, userIdNum);
         console.log('Supabase entry updated');
+
+        // If entry is being marked as completed and it has a reference to a task,
+        // also update the task status if it's not already completed
+        if (data.status === 'completed') {
+          try {
+            // Find the full entry to get the ref_task_id
+            const entries = await scheduleService.getByDate(new Date(), userId);
+            const updatedEntry = entries.find(entry => entry.entry_id.toString() === entryId);
+            
+            if (updatedEntry && updatedEntry.ref_task_id) {
+              const taskId = updatedEntry.ref_task_id.toString();
+              console.log(`Schedule entry completed with ref_task_id: ${taskId}`);
+              
+              // Get current task status
+              const taskToUpdate = tasks.find(t => t.task_id.toString() === taskId);
+              
+              // Only update if the task exists and is not already completed
+              if (taskToUpdate && taskToUpdate.status !== 'completed') {
+                console.log(`Updating referenced task ${taskId} to completed status`);
+                await updateTask(taskId, { status: 'completed' });
+              }
+            }
+          } catch (taskUpdateError) {
+            console.error('Error updating referenced task:', taskUpdateError);
+            // Continue execution even if task update fails
+          }
+        }
+        
         // Make sure loadScheduleEntries completes before returning
         await loadScheduleEntries();
         return true;
@@ -450,6 +478,26 @@ export function DbProvider({ children }: { children: ReactNode }) {
       
       // 回退到本地数据库
       await scheduleService.update(entryId, data, userId);
+
+      // Same task update logic for local DB workflow
+      if (data.status === 'completed') {
+        try {
+          const entries = await scheduleService.getByDate(new Date(), userId);
+          const updatedEntry = entries.find(entry => entry.entry_id.toString() === entryId);
+          
+          if (updatedEntry && updatedEntry.ref_task_id) {
+            const taskId = updatedEntry.ref_task_id.toString();
+            const taskToUpdate = tasks.find(t => t.task_id.toString() === taskId);
+            
+            if (taskToUpdate && taskToUpdate.status !== 'completed') {
+              await updateTask(taskId, { status: 'completed' });
+            }
+          }
+        } catch (taskUpdateError) {
+          console.error('Error updating referenced task:', taskUpdateError);
+        }
+      }
+      
       // Make sure loadScheduleEntries completes before returning
       await loadScheduleEntries();
       return true;

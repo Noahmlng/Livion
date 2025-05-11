@@ -265,14 +265,58 @@ const TodayView = () => {
     console.log('- onDragStart:', handleDragStart);
     console.log('- onDragEnd:', handleDragEnd);
     
-    // Prevent native browser drag behavior to avoid interference with react-beautiful-dnd
+    // 添加拖拽功能增强
+    // 这个函数用来确保所有draggable元素都能正常工作
+    const enhanceDraggableElements = () => {
+      // 查找所有拖拽相关元素
+      const draggables = document.querySelectorAll('[data-rbd-draggable-id], [data-rbd-drag-handle-draggable-id]');
+      
+      // 确保它们可以被拖拽
+      draggables.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.setAttribute('draggable', 'true');
+          el.style.cursor = 'grab';
+          
+          // 添加视觉反馈
+          el.addEventListener('mousedown', () => {
+            el.style.cursor = 'grabbing';
+          });
+          
+          el.addEventListener('mouseup', () => {
+            el.style.cursor = 'grab';
+          });
+        }
+      });
+    };
+    
+    // 初始化后执行一次增强
+    setTimeout(enhanceDraggableElements, 1000);
+    
+    // 选择性阻止原生拖拽: 只阻止非draggable元素的拖拽
     const preventNativeDrag = (e: DragEvent) => {
+      // 检查目标元素是否是可拖拽元素或者其内部元素
+      const target = e.target as HTMLElement;
+      if (
+        target.hasAttribute('draggable') || 
+        target.closest('[draggable="true"]') || 
+        target.closest('[data-rbd-draggable-id]') || 
+        target.closest('[data-rbd-drag-handle-draggable-id]')
+      ) {
+        // 如果是可拖拽元素，允许拖拽
+        return true;
+      }
+      
+      // 只禁用非拖拽元素的拖拽行为
       e.preventDefault();
       return false;
     };
     
-    // Add global dragstart listener to override native browser behavior
+    // 添加全局拖拽事件监听器 - 只阻止非draggable元素的拖拽
     document.addEventListener('dragstart', preventNativeDrag);
+    
+    // 每当有DOM变化时，重新检查并增强
+    const observer = new MutationObserver(enhanceDraggableElements);
+    observer.observe(document.body, { childList: true, subtree: true });
     
     // Load today's schedule entries
     loadTodayScheduleEntries();
@@ -291,6 +335,9 @@ const TodayView = () => {
     
     // Clean up event listeners
     return () => {
+      // 清理observer
+      observer.disconnect();
+      // 移除全局拖拽事件监听器
       document.removeEventListener('dragstart', preventNativeDrag);
     };
   }, []);
@@ -1077,7 +1124,7 @@ const TodayView = () => {
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                               className={`
-                                group relative flex items-center w-full p-3 
+                                group relative flex items-center w-full p-3 drag-item
                                 ${snapshot.isDragging ? 'bg-bg-panel/90 shadow-lg' : 'bg-black/70'} 
                                 border border-border-metal rounded 
                                 transition-colors duration-200
@@ -1645,7 +1692,7 @@ const TodayView = () => {
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center`}
+                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center drag-item`}
                                 style={{
                                   ...provided.draggableProps.style,
                                   zIndex: snapshot.isDragging ? 9999 : 50
@@ -1729,7 +1776,7 @@ const TodayView = () => {
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center`}
+                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center drag-item`}
                                 style={{
                                   ...provided.draggableProps.style,
                                   zIndex: snapshot.isDragging ? 9999 : 50

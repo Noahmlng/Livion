@@ -1,16 +1,38 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useValhallaTaskContext } from '../../context/ValhallaTaskContext';
 import ReactCropperPro from 'react-cropper-pro';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import defaultTaskImage from '../../assets/ac-valhalla-settlement.avif';
+import { useDb } from '../../context/DbContext';
+import { Task } from '../../utils/database';
+import TextareaAutosize from 'react-textarea-autosize';
+
+// Norse-style completion icon component
+const CompletionIcon = () => (
+  <div className="absolute -top-1 -left-1 w-6 h-6 bg-cyan-900/80 rounded-full flex items-center justify-center border border-cyan-600/50 z-10">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-3.5 h-3.5 text-cyan-300"
+    >
+      {/* A slightly Norse-inspired checkmark */}
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  </div>
+);
 
 const TasksView = () => {
-  const { categories, toggleTaskCompletion, updateTask, deleteTask } = useValhallaTaskContext();
+  const { tasks, loadTasks, updateTask, deleteTask } = useDb();
   
   // State for UI management
-  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingReward, setEditingReward] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -22,64 +44,96 @@ const TasksView = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   
   // Refs for editable elements
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const rewardRef = useRef<HTMLSpanElement>(null);
-  const descriptionRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Filter to just get the side quests / challenges tasks
-  const challengeTasks = categories.find(cat => cat.id === 'side')?.tasks || [];
+  const challengeTasks = tasks.filter(task => 
+    task.status === 'ongoing' || task.status === 'completed'
+  ).sort((a, b) => {
+    // First sort by status (ongoing before completed)
+    if (a.status !== b.status) {
+      return a.status === 'ongoing' ? -1 : 1;
+    }
+    
+    // Then sort by priority (higher first)
+    if (a.priority !== b.priority) {
+      return b.priority - a.priority;
+    }
+    
+    // Then sort by reward points (higher first)
+    if ((a.reward_points || 0) !== (b.reward_points || 0)) {
+      return (b.reward_points || 0) - (a.reward_points || 0);
+    }
+    
+    // Finally sort by creation date (newer first)
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
   
-  // Initialize selected task when component mounts
+  // Load tasks when component mounts
   useEffect(() => {
-    if (challengeTasks.length > 0 && !selectedTask) {
+    loadTasks();
+  }, []);
+  
+  // Update the selected task when tasks change or the selected task is updated
+  useEffect(() => {
+    if (selectedTask) {
+      // Find the current task in the updated task list
+      const updatedTask = tasks.find(t => t.task_id === selectedTask.task_id);
+      
+      // If the task still exists, update the selected task with the latest data
+      if (updatedTask) {
+        setSelectedTask(updatedTask);
+      } else if (challengeTasks.length > 0) {
+        // If the task doesn't exist, select the first task
+        setSelectedTask(challengeTasks[0]);
+      } else {
+        setSelectedTask(null);
+      }
+    } else if (challengeTasks.length > 0 && !selectedTask) {
       setSelectedTask(challengeTasks[0]);
     }
-  }, [challengeTasks]);
+  }, [tasks, challengeTasks]);
   
-  // Set focus when entering edit mode
+  // Set focus when editing begins
   useEffect(() => {
-    if (editingTitle && titleRef.current) {
-      titleRef.current.focus();
-      placeCursorAtEnd(titleRef.current);
+    if (editingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
     }
   }, [editingTitle]);
   
   useEffect(() => {
-    if (editingReward && rewardRef.current) {
-      rewardRef.current.focus();
-      placeCursorAtEnd(rewardRef.current);
-    }
-  }, [editingReward]);
-  
-  useEffect(() => {
-    if (editingDescription && descriptionRef.current) {
-      descriptionRef.current.focus();
-      placeCursorAtEnd(descriptionRef.current);
+    if (editingDescription && descriptionTextareaRef.current) {
+      descriptionTextareaRef.current.focus();
     }
   }, [editingDescription]);
   
-  // Helper function to place cursor at the end of content
-  const placeCursorAtEnd = (element: HTMLElement) => {
-    const range = document.createRange();
-    const selection = window.getSelection();
-    range.selectNodeContents(element);
-    range.collapse(false); // false means collapse to end
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+  // Helper function to update the task and refresh the data
+  const handleTaskUpdate = async (taskId: string, data: Partial<Task>) => {
+    setIsUpdating(true);
+    try {
+      await updateTask(taskId, data);
+      // Immediately reload tasks to reflect changes
+      await loadTasks();
+    } catch (error) {
+      console.error('Error updating task:', error);
+    } finally {
+      setIsUpdating(false);
+    }
   };
   
   // Handlers for editing task fields
   const startEditingTitle = () => {
     if (!selectedTask) return;
-    setEditingValues(prev => ({ ...prev, title: selectedTask.title }));
+    setEditingValues(prev => ({ ...prev, title: selectedTask.name }));
     setEditingTitle(true);
   };
   
   const startEditingReward = () => {
     if (!selectedTask) return;
-    // Convert reward to number, assuming it's a numeric value stored in the reward_points field
     setEditingValues(prev => ({ ...prev, reward: selectedTask.reward_points || 0 }));
     setEditingReward(true);
   };
@@ -90,46 +144,42 @@ const TasksView = () => {
     setEditingDescription(true);
   };
   
-  const saveTitle = () => {
+  const saveTitle = async () => {
     if (!selectedTask) return;
-    updateTask(selectedTask.id, 'side', { title: editingValues.title });
+    await handleTaskUpdate(selectedTask.task_id.toString(), { name: editingValues.title });
     setEditingTitle(false);
   };
   
-  const saveReward = () => {
+  const saveReward = async () => {
     if (!selectedTask) return;
-    // Update reward_points field with the numeric value
-    updateTask(selectedTask.id, 'side', { 
+    await handleTaskUpdate(selectedTask.task_id.toString(), { 
       reward_points: editingValues.reward 
     });
     setEditingReward(false);
   };
   
-  const saveDescription = () => {
+  const saveDescription = async () => {
     if (!selectedTask) return;
-    updateTask(selectedTask.id, 'side', { description: editingValues.description });
+    await handleTaskUpdate(selectedTask.task_id.toString(), { description: editingValues.description });
     setEditingDescription(false);
   };
   
   // Handler for updating priority
-  const increasePriority = (taskId: string, event: React.MouseEvent) => {
+  const increasePriority = async (taskId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    const task = challengeTasks.find(t => t.id === taskId);
+    const task = challengeTasks.find(t => t.task_id.toString() === taskId);
     if (task) {
-      const newDifficulty = (task.difficulty < 3) ? 
-        (task.difficulty + 1) as (1 | 2 | 3) : 
-        task.difficulty;
-      updateTask(taskId, 'side', { difficulty: newDifficulty });
+      // Remove the upper limit of 3
+      const newPriority = task.priority + 1;
+      await handleTaskUpdate(taskId, { priority: newPriority });
     }
   };
   
   // Handler for completing task with effect
-  const completeTask = () => {
+  const completeTask = async () => {
     if (!selectedTask) return;
-    toggleTaskCompletion(selectedTask.id, 'side');
-    
-    // Add any completion effects here
-    // ...
+    const newStatus = selectedTask.status === 'completed' ? 'ongoing' : 'completed';
+    await handleTaskUpdate(selectedTask.task_id.toString(), { status: newStatus });
   };
   
   // Handlers for delete confirmation
@@ -137,14 +187,26 @@ const TasksView = () => {
     setShowDeleteConfirm(true);
   };
   
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedTask) return;
-    deleteTask(selectedTask.id, 'side');
-    setShowDeleteConfirm(false);
-    if (challengeTasks.length > 0) {
-      setSelectedTask(challengeTasks[0]);
-    } else {
-      setSelectedTask(null);
+    const taskId = selectedTask.task_id.toString();
+    
+    try {
+      await deleteTask(taskId);
+      // Immediately reload tasks to reflect changes
+      await loadTasks();
+      
+      setShowDeleteConfirm(false);
+      
+      if (challengeTasks.length > 0) {
+        // Find the next task that isn't the deleted one
+        const nextTask = challengeTasks.find(task => task.task_id !== selectedTask.task_id);
+        setSelectedTask(nextTask || null);
+      } else {
+        setSelectedTask(null);
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
     }
   };
   
@@ -163,13 +225,37 @@ const TasksView = () => {
     input.click();
   };
   
-  const handleCropComplete = (croppedImageUrl: string) => {
+  const handleCropComplete = async (croppedImageUrl: string) => {
     if (!selectedTask) return;
     
     // In a real implementation, you would upload the cropped image to storage
     // For now, we'll just update the task with the data URL
-    updateTask(selectedTask.id, 'side', { imageUrl: croppedImageUrl });
+    await handleTaskUpdate(selectedTask.task_id.toString(), { image_path: croppedImageUrl });
     setShowCropper(false);
+  };
+  
+  // Function to determine priority colors
+  const getPriorityColor = (index: number, priority: number) => {
+    if (index < priority && index < 3) {
+      // Priority levels filled - using cooler tones (up to 3 visual indicators)
+      return [
+        'bg-sky-400/80', // Priority 1
+        'bg-teal-400/80', // Priority 2
+        'bg-cyan-400/80', // Priority 3
+      ][index] || 'bg-accent-gold';
+    }
+    
+    // Empty priority indicators
+    return 'bg-gray-500/20';
+  };
+  
+  // Function to handle input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: 'title' | 'description' | 'reward') => {
+    const value = e.target.value;
+    setEditingValues(prev => ({ 
+      ...prev, 
+      [field]: field === 'reward' ? parseInt(value) || 0 : value 
+    }));
   };
   
   return (
@@ -177,178 +263,182 @@ const TasksView = () => {
       <div className="flex gap-6 flex-1 overflow-hidden">
         {/* Left Column - Task List */}
         <div className="w-64 valhalla-panel overflow-auto">
-          <h3 className="font-display text-xl text-text-primary mb-4 pb-2 border-b border-border-metal">
-            Challenges
-          </h3>
-          
-          <div className="space-y-2">
+          <div className="space-y-3 p-1">
             {challengeTasks.map(task => (
               <motion.div
-                key={task.id}
+                key={task.task_id}
                 whileHover={{ x: 3 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setSelectedTask(task)}
-                className={`p-3 cursor-pointer ${
-                  selectedTask?.id === task.id 
-                    ? 'bg-accent-gold text-text-on-accent'
-                    : 'hover:bg-sidebar-item-hover-bg'
-                } ${task.completed ? 'line-through opacity-60' : ''}`}
+                className={`p-3 cursor-pointer rounded-lg transition-all relative ${
+                  selectedTask?.task_id === task.task_id 
+                    ? task.status === 'completed'
+                      ? 'bg-slate-700/90 text-slate-200 border border-cyan-900/50 shadow-md'
+                      : 'bg-slate-800/90 text-cyan-100 border border-cyan-800/50 shadow-md'
+                    : task.status === 'completed'
+                      ? 'hover:bg-slate-800/60 text-slate-300/90 bg-slate-900/30 border border-slate-700/20'
+                      : 'hover:bg-slate-800/60 text-wheat-100/90 bg-slate-900/40 border border-slate-700/30'
+                }`}
               >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold">{task.title}</span>
+                {/* Completion Icon */}
+                {task.status === 'completed' && <CompletionIcon />}
+                
+                <div className="flex justify-between items-start">
+                  <span className="font-semibold line-clamp-2 flex-1">
+                    {task.name}
+                  </span>
                   <div 
-                    className="flex cursor-pointer"
-                    onClick={(e) => increasePriority(task.id, e)}
+                    className="flex cursor-pointer ml-2 flex-shrink-0 mt-1"
+                    onClick={(e) => increasePriority(task.task_id.toString(), e)}
                   >
                     {[...Array(3)].map((_, i) => (
                       <div 
                         key={i} 
-                        className={`w-3 h-3 mx-0.5 rounded-sm ${
-                          i < task.difficulty ? 'bg-accent-gold' : 'bg-border-metal'
-                        }`}
-                      ></div>
+                        className={`w-2.5 h-2.5 mx-0.5 rounded-sm ${
+                          getPriorityColor(i, task.priority)
+                        } flex items-center justify-center text-[6px]`}
+                      >
+                        {i === 2 && task.priority > 3 && "+"}
+                      </div>
                     ))}
                   </div>
-                </div>
-                <div className="text-sm text-text-secondary">
-                  Rewards: {task.reward_points}
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
         
-        {/* Middle Column - Task Details */}
-        <div className="flex-1 valhalla-panel overflow-auto">
+        {/* Right Column - Task Details with Background Image */}
+        <div className="flex-1 valhalla-panel overflow-auto relative">
+          {selectedTask && (
+            <>
+              {/* Background Image with Opacity */}
+              <div className="absolute inset-0 z-0">
+                <div 
+                  className="w-full h-full bg-cover bg-center opacity-15"
+                  style={{ 
+                    backgroundImage: `url(${selectedTask.image_path || defaultTaskImage})`,
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-cyan-900/10 to-transparent"></div>
+              </div>
+            </>
+          )}
+          
+          {isUpdating && (
+            <div className="absolute inset-0 bg-slate-900/30 z-50 flex items-center justify-center">
+              <div className="animate-pulse text-cyan-400">更新中...</div>
+            </div>
+          )}
+          
           {selectedTask ? (
             <AnimatePresence mode="wait">
               <motion.div
-                key={selectedTask.id}
+                key={selectedTask.task_id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className="h-full flex flex-col"
+                className="h-full flex flex-col relative z-10"
               >
-                <div className="flex justify-between mb-4 pb-3 border-b border-border-metal">
+                <div className="mb-4 pb-3 border-b border-cyan-800/30 px-4 pt-4">
                   {editingTitle ? (
-                    <h2 
-                      className="text-2xl font-display text-accent-gold outline-none"
-                      contentEditable
-                      suppressContentEditableWarning
-                      onBlur={() => {
-                        saveTitle();
-                      }}
+                    <input
+                      ref={titleInputRef}
+                      className="text-xl font-display text-cyan-300 outline-none bg-transparent w-full border-b border-cyan-500/30 focus:border-cyan-500/50 px-1 py-2"
+                      value={editingValues.title}
+                      onChange={(e) => handleInputChange(e, 'title')}
+                      onBlur={saveTitle}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          e.currentTarget.blur();
+                          saveTitle();
                         }
                       }}
-                      onInput={(e) => {
-                        const value = e.currentTarget.textContent || '';
-                        setEditingValues(prev => ({ ...prev, title: value }));
-                      }}
-                      ref={titleRef}
-                    >
-                      {editingValues.title}
-                    </h2>
+                    />
                   ) : (
-                    <h2 
-                      className="text-2xl font-display text-text-primary cursor-pointer"
-                      onClick={() => {
-                        startEditingTitle();
-                      }}
-                    >
-                      {selectedTask.title}
-                    </h2>
-                  )}
-                  
-                  {editingReward ? (
-                    <div className="flex items-center">
-                      <span className="text-wheat-300 mr-1">Rewards:</span>
-                      <span
-                        className="text-accent-gold font-display outline-none"
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={() => {
-                          saveReward();
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          }
-                        }}
-                        onInput={(e) => {
-                          const value = parseInt(e.currentTarget.textContent || '0') || 0;
-                          setEditingValues(prev => ({ ...prev, reward: value }));
-                        }}
-                        ref={rewardRef}
+                    <div className="flex items-center gap-2 py-2">
+                      <h2 
+                        className="text-xl font-display text-cyan-300 cursor-pointer"
+                        onClick={startEditingTitle}
                       >
-                        {editingValues.reward}
-                      </span>
-                    </div>
-                  ) : (
-                    <div 
-                      className="text-accent-gold font-display cursor-pointer"
-                      onClick={() => {
-                        startEditingReward();
-                      }}
-                    >
-                      Rewards: {selectedTask.reward_points}
+                        {selectedTask.name}
+                      </h2>
+                      
+                      {selectedTask.status === 'completed' && (
+                        <span className="bg-cyan-900/80 rounded-full p-1 inline-flex">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="w-4 h-4 text-cyan-300"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
                 
                 <div className="flex-1 mb-4 overflow-auto">
                   {editingDescription ? (
-                    <div 
-                      className="prose prose-invert max-w-none outline-none"
-                      contentEditable
-                      suppressContentEditableWarning
-                      onBlur={() => {
-                        saveDescription();
+                    <TextareaAutosize
+                      ref={descriptionTextareaRef}
+                      className="w-full prose prose-invert max-w-none outline-none bg-slate-800/40 p-4 rounded-md border border-cyan-900/20 focus:border-cyan-900/40 resize-none"
+                      value={editingValues.description}
+                      onChange={(e) => handleInputChange(e, 'description')}
+                      onBlur={saveDescription}
+                      onKeyDown={(e) => {
+                        // Don't save on Enter, allow multi-line input
+                        if (e.key === 'Enter' && e.shiftKey) {
+                          // Save only on Shift+Enter if needed
+                          e.preventDefault();
+                          saveDescription();
+                        }
                       }}
-                      onInput={(e) => {
-                        const value = e.currentTarget.textContent || '';
-                        setEditingValues(prev => ({ ...prev, description: value }));
-                      }}
-                      ref={descriptionRef}
-                    >
-                      {editingValues.description}
-                    </div>
+                      minRows={4}
+                      spellCheck={false}
+                    />
                   ) : (
                     <div 
-                      className="prose prose-invert max-w-none cursor-pointer"
-                      onClick={() => {
-                        startEditingDescription();
-                      }}
+                      className="prose prose-invert max-w-none cursor-pointer bg-slate-800/40 p-4 rounded-md whitespace-pre-wrap"
+                      onClick={startEditingDescription}
                     >
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          // Handle line breaks specifically
+                          p: ({ children }: { children: React.ReactNode }) => <p className="whitespace-pre-line">{children}</p>
+                        }}
+                      >
                         {selectedTask.description}
                       </ReactMarkdown>
                     </div>
                   )}
                 </div>
                 
-                <div className="flex justify-end gap-3 mt-auto pt-3 border-t border-border-metal">
+                <div className="flex justify-end gap-3 mt-auto pt-3 border-t border-cyan-800/30">
                   {!showDeleteConfirm ? (
                     <>
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="px-4 py-2 bg-transparent text-red-500 border border-red-500 font-display uppercase tracking-wider text-sm rounded-md"
+                        className="px-4 py-2 bg-transparent text-red-400 border border-red-500/50 font-display uppercase tracking-wider text-sm rounded-md"
                         onClick={confirmDelete}
                       >
                         删除
                       </motion.button>
                       
-                      {selectedTask.completed ? (
+                      {selectedTask.status === 'completed' ? (
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-accent-gold text-text-on-accent font-display tracking-wider text-sm rounded-md"
+                          className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md border border-cyan-600/30"
                           onClick={completeTask}
                         >
                           恢复任务
@@ -357,7 +447,7 @@ const TasksView = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-accent-gold text-text-on-accent font-display tracking-wider text-sm rounded-md shadow-md"
+                          className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md shadow-md border border-cyan-600/30"
                           onClick={completeTask}
                         >
                           完成任务
@@ -368,7 +458,7 @@ const TasksView = () => {
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="px-4 py-2 bg-red-600 text-white font-display uppercase tracking-wider text-sm rounded-md"
+                      className="px-4 py-2 bg-red-700/80 text-white font-display uppercase tracking-wider text-sm rounded-md"
                       onClick={handleDelete}
                     >
                       Confirm Delete
@@ -378,62 +468,36 @@ const TasksView = () => {
               </motion.div>
             </AnimatePresence>
           ) : (
-            <div className="flex items-center justify-center h-full text-text-secondary">
+            <div className="flex items-center justify-center h-full text-slate-400">
               Select a challenge to view details
             </div>
           )}
-        </div>
-        
-        {/* Right Column - Image */}
-        <div className="w-80 valhalla-panel overflow-auto flex flex-col items-center justify-center">
-          {selectedTask && (
-            <>
-              <div 
-                className="w-full h-full flex items-center justify-center cursor-pointer overflow-hidden"
-                onClick={handleImageClick}
-              >
-                {selectedTask.imageUrl ? (
-                  <img 
-                    src={selectedTask.imageUrl} 
-                    alt={selectedTask.title}
-                    className="max-w-full max-h-full object-contain hover:opacity-80 transition-opacity"
+          
+          {showCropper && imageFile && (
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+              <div className="bg-slate-900 p-4 rounded-lg max-w-3xl w-full border border-cyan-900/30">
+                <h3 className="text-xl font-display text-cyan-400 mb-4">
+                  Crop Image
+                </h3>
+                
+                <div className="mb-4">
+                  <ReactCropperPro
+                    src={URL.createObjectURL(imageFile)}
+                    onChange={handleCropComplete}
+                    aspectRatio={16/9}
                   />
-                ) : (
-                  <img 
-                    src={defaultTaskImage} 
-                    alt="Default task background"
-                    className="max-w-full max-h-full object-cover hover:opacity-80 transition-opacity"
-                  />
-                )}
-              </div>
-              
-              {showCropper && imageFile && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-                  <div className="bg-bg-dark p-4 rounded-lg max-w-3xl w-full">
-                    <h3 className="text-xl font-display text-accent-gold mb-4">
-                      Crop Image
-                    </h3>
-                    
-                    <div className="mb-4">
-                      <ReactCropperPro
-                        src={URL.createObjectURL(imageFile)}
-                        onChange={handleCropComplete}
-                        aspectRatio={16/9}
-                      />
-                    </div>
-                    
-                    <div className="flex justify-end gap-3">
-                      <button
-                        className="px-4 py-2 bg-border-metal text-text-primary rounded"
-                        onClick={() => setShowCropper(false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              )}
-            </>
+                
+                <div className="flex justify-end gap-3">
+                  <button
+                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded border border-slate-700"
+                    onClick={() => setShowCropper(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

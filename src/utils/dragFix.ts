@@ -3,63 +3,30 @@
 
 import { useEffect } from 'react';
 
+// 修复react-beautiful-dnd在React 18中的拖拽问题
 export const useDragDropFix = () => {
   useEffect(() => {
-    // This is a workaround for react-beautiful-dnd and React 18+ compatibility
+    // 抑制控制台错误，这些错误通常不会影响功能
     const originalConsoleError = console.error;
     console.error = (...args: any) => {
+      // 忽略react-beautiful-dnd相关的特定警告
       if (
         args[0]?.includes?.('attachRefs') ||
         args[0]?.includes?.('findDOMNode is deprecated in StrictMode') ||
         args[0]?.includes?.('forwardRef render functions') ||
-        // Add any other error messages to suppress
-        false
+        args[0]?.includes?.('ReactDOM.findDOMNode')
       ) {
         return;
       }
       originalConsoleError(...args);
     };
 
-    // Intercept preventDefault to make it work properly in React 18
-    const originalAddEventListener = document.addEventListener;
-    document.addEventListener = function (
-      type: string, 
-      listener: EventListenerOrEventListenerObject, 
-      options?: boolean | AddEventListenerOptions
-    ) {
-      // Override specifically for drag events
-      if (
-        type === 'touchstart' ||
-        type === 'touchmove' ||
-        type === 'wheel' ||
-        type === 'dragstart'
-      ) {
-        originalAddEventListener.call(
-          document,
-          type,
-          function (e: Event) {
-            if (e.defaultPrevented) {
-              // Do nothing if preventDefault already called
-              return;
-            }
-            
-            if (typeof listener === 'function') {
-              listener(e);
-            } else if (listener && typeof listener.handleEvent === 'function') {
-              listener.handleEvent(e);
-            }
-          },
-          options
-        );
-        return;
-      }
-      originalAddEventListener.call(document, type, listener, options);
-    } as typeof document.addEventListener;
+    // 注意: 拖拽禁用逻辑已移至TodayView组件中实现
+    // 此处不再添加全局拖拽事件处理
 
-    // Clean up
+    // 清理函数
     return () => {
       console.error = originalConsoleError;
-      document.addEventListener = originalAddEventListener;
     };
   }, []);
 }; 
