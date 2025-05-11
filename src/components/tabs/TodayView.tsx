@@ -82,6 +82,7 @@ interface Task {
   category?: string;
   goal_id?: number;
   user_id: number;
+  priority?: number;  // 添加priority字段
 }
 
 // 辅助函数：检查两个日期是否在同一天（基于当地时间）
@@ -369,26 +370,36 @@ const TodayView = () => {
     setLoadingTasks(true);
     try {
       // 直接从 Supabase 获取用户的任务，避免使用 DbContext 中的方法
-      console.log('Fetching tasks for user ID:', userId);
+      console.log('Fetching ongoing tasks for user ID:', userId);
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('status', 'ongoing')  // 只获取状态为ongoing的任务
+        .order('priority', { ascending: false });  // 按priority倒序排列
         
       if (error) {
         console.error('Error fetching tasks from Supabase:', error);
         throw error;
       }
       
-      console.log('Fetched tasks from Supabase:', data);
+      console.log('Fetched ongoing tasks from Supabase:', data);
       setUserTasks(data || []);
     } catch (error) {
       console.error('Error loading user tasks:', error);
       // 如果直接获取失败，回退到使用 DbContext 中的方法
       try {
         await loadTasks();
-        console.log('Loaded tasks via DbContext:', tasks);
-        setUserTasks(tasks);
+        // 过滤和排序从DbContext加载的任务
+        const filteredTasks = tasks
+          .filter(task => task.status === 'ongoing')
+          .sort((a, b) => {
+            const priorityA = a.priority || 0;
+            const priorityB = b.priority || 0;
+            return priorityB - priorityA;  // 倒序排列
+          });
+        console.log('Loaded and filtered tasks via DbContext:', filteredTasks);
+        setUserTasks(filteredTasks);
       } catch (fallbackError) {
         console.error('Fallback load method also failed:', fallbackError);
       }
@@ -1628,7 +1639,7 @@ const TodayView = () => {
                     <div 
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="space-y-2 p-1"
+                      className="space-y-2 p-1 h-[175px] overflow-y-auto hide-scrollbar"
                     >
                       {loadingTasks ? (
                         <div className="text-center py-4">
@@ -1712,7 +1723,7 @@ const TodayView = () => {
                     <div 
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="space-y-2 p-1"
+                      className="space-y-2 p-1 h-[175px] overflow-y-auto hide-scrollbar"
                     >
                       {loadingTemplates ? (
                         <div className="text-center py-4">
