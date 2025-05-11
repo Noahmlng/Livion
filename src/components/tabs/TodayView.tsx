@@ -57,16 +57,6 @@ interface Note {
   createdAt: Date;
 }
 
-// 辅助函数：转换UTC时间到北京时间 (UTC+8)
-const toBeijingTime = (date: Date): Date => {
-  return new Date(date.getTime() + 8 * 60 * 60 * 1000);
-};
-
-// 辅助函数：从北京时间转回UTC时间
-const fromBeijingTime = (date: Date): Date => {
-  return new Date(date.getTime() - 8 * 60 * 60 * 1000);
-};
-
 // 辅助函数：检查两个日期是否在同一天（基于当地时间）
 const isSameDay = (date1: Date, date2: Date): boolean => {
   return (
@@ -74,6 +64,30 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
     date1.getMonth() === date2.getMonth() &&
     date1.getDate() === date2.getDate()
   );
+};
+
+// 辅助函数：正确处理UTC日期，避免自动时区转换导致的+8小时问题
+const correctUtcDate = (isoDateString: string | undefined): Date => {
+  if (!isoDateString) return new Date();
+  
+  // 将ISO日期字符串解析为UTC日期组件
+  const match = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (!match) return new Date(isoDateString);
+  
+  // 解析日期组件
+  const [_, year, month, day, hours, minutes, seconds] = match;
+  
+  // 创建当地时间的Date对象，不进行时区转换
+  const date = new Date();
+  date.setFullYear(parseInt(year));
+  date.setMonth(parseInt(month) - 1); // 月份从0开始
+  date.setDate(parseInt(day));
+  date.setHours(parseInt(hours));
+  date.setMinutes(parseInt(minutes));
+  date.setSeconds(parseInt(seconds));
+  date.setMilliseconds(0);
+  
+  return date;
 };
 
 const TodayView = () => {
@@ -143,22 +157,19 @@ const TodayView = () => {
   
   // 从数据库加载今天的任务安排
   const loadTodayScheduleEntries = async () => {
-    // 获取北京时间的今天
-    const utcNow = new Date();
-    const beijingNow = toBeijingTime(utcNow);
+    // 获取系统当前时间（已经是UTC+8）
+    const now = new Date();
     
-    // 重要：使用北京时间直接构造日期，避免时区转换错误
-    const beijingYear = beijingNow.getFullYear();
-    const beijingMonth = String(beijingNow.getMonth() + 1).padStart(2, '0'); // 月份从0开始
-    const beijingDay = String(beijingNow.getDate()).padStart(2, '0');
-    const beijingDateStr = `${beijingYear}-${beijingMonth}-${beijingDay}`;
+    // 直接构造日期字符串
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0'); // 月份从0开始
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     
-    // 构造基于北京时间的日期（UTC+8）的开始和结束时间
-    // 注意：我们在数据库中保存的是日期字符串（没有时区信息），所以直接使用北京时区的日期字符串
     // 创建一个日期对象只是为了方便进行查询
-    const dateObj = new Date(`${beijingDateStr}T00:00:00.000Z`);
+    const dateObj = new Date(`${dateStr}T00:00:00.000Z`);
     
-    // 使用日期范围加载数据 - 注意使用日期字符串作为查询条件
+    // 使用日期范围加载数据
     const entriesByDate = await loadScheduleEntriesRange(dateObj, dateObj);
     
     // 将所有日期的条目合并为单一数组
@@ -167,7 +178,7 @@ const TodayView = () => {
       allEntries.push(...entries);
     });
     
-    // 额外的过滤，确保只包含今天的任务（基于北京时间）
+    // 额外的过滤，确保只包含今天的任务
     const todayEntries = allEntries.filter(entry => {
       // 将条目的日期提取出来进行比较
       let entryDateStr: string;
@@ -175,16 +186,15 @@ const TodayView = () => {
         // 如果已经是字符串，提取日期部分（可能是YYYY-MM-DD或ISO格式）
         entryDateStr = entry.date.includes('T') ? entry.date.split('T')[0] : entry.date;
       } else if (entry.date instanceof Date) {
-        // 如果是Date对象，转换为北京时间再提取日期部分
-        const entryDateBeijing = toBeijingTime(entry.date);
-        entryDateStr = `${entryDateBeijing.getFullYear()}-${String(entryDateBeijing.getMonth() + 1).padStart(2, '0')}-${String(entryDateBeijing.getDate()).padStart(2, '0')}`;
+        // 如果是Date对象，提取日期部分
+        entryDateStr = entry.date.toISOString().split('T')[0];
       } else {
         console.warn('无效的日期格式:', entry.date);
         return false;
       }
       
-      // 直接比较日期字符串，避免时区转换问题
-      return entryDateStr === beijingDateStr;
+      // 直接比较日期字符串
+      return entryDateStr === dateStr;
     });
     
     // 将数据转换为UI格式并更新状态
@@ -216,34 +226,33 @@ const TodayView = () => {
     setLoading(true);
     
     try {
-      // 使用北京时间作为基准
-      const utcNow = new Date();
-      const beijingNow = toBeijingTime(utcNow);
+      // 使用系统时间（已经是UTC+8）
+      const now = new Date();
       
       // 处理每一天的数据
       const newHistoryData: TaskHistoryDay[] = [];
       
       // 遍历日期范围，从昨天开始（i 从 startFromDay 开始，默认为 1，表示昨天）
       for (let i = startFromDay; i < startFromDay + daysToLoad; i++) {
-        // 计算北京时间的日期
-        const beijingDate = new Date(beijingNow);
-        beijingDate.setDate(beijingDate.getDate() - i);
+        // 计算历史日期
+        const historyDate = new Date(now);
+        historyDate.setDate(historyDate.getDate() - i);
         
-        // 构造日期字符串 - 直接使用北京时间
-        const year = beijingDate.getFullYear();
-        const month = String(beijingDate.getMonth() + 1).padStart(2, '0');
-        const day = String(beijingDate.getDate()).padStart(2, '0');
-        const beijingDateStr = `${year}-${month}-${day}`;
+        // 构造日期字符串
+        const year = historyDate.getFullYear();
+        const month = String(historyDate.getMonth() + 1).padStart(2, '0');
+        const day = String(historyDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
         
-        // 格式化日期显示（使用北京时间展示）
-        const formattedDate = beijingDate.toLocaleDateString('zh-CN', {
+        // 格式化日期显示（直接使用本地化设置，无需额外时区转换）
+        const formattedDate = historyDate.toLocaleDateString('zh-CN', {
           month: 'long',
           day: 'numeric',
           weekday: 'long'
         });
         
         // 使用构造的日期对象查询
-        const dateObj = new Date(`${beijingDateStr}T00:00:00.000Z`);
+        const dateObj = new Date(`${dateStr}T00:00:00.000Z`);
         const entriesByDate = await loadScheduleEntriesRange(dateObj, dateObj);
         
         // 合并所有条目
@@ -252,7 +261,7 @@ const TodayView = () => {
           entriesForDay = entriesForDay.concat(entries);
         });
         
-        console.log(`北京时间 ${beijingDateStr} 的任务数: ${entriesForDay.length}`);
+        console.log(`${dateStr} 的任务数: ${entriesForDay.length}`);
         
         // 将数据转换为 UI 格式
         const tasksForDay = entriesForDay.map(entry => ({
@@ -262,24 +271,24 @@ const TodayView = () => {
           timeSlot: entry.slot as TimeSlot
         }));
         
-        // 只有有任务的日期才添加到历史记录中
-        if (tasksForDay.length > 0) {
-          newHistoryData.push({
-            date: beijingDate, // 使用北京时间存储日期
-            formattedDate,
-            tasks: tasksForDay
-          });
-        }
+        // 添加到历史记录
+        newHistoryData.push({
+          date: historyDate,
+          formattedDate,
+          tasks: tasksForDay
+        });
       }
       
-      // 将新加载的历史数据添加到现有数据后面
-      if (startFromDay === 1) {
-        setTaskHistory(newHistoryData);
-      } else {
-        setTaskHistory(prevHistory => [...prevHistory, ...newHistoryData]);
-      }
+      // 更新历史状态
+      setTaskHistory(prevHistory => {
+        if (startFromDay === 1) {
+          return newHistoryData;
+        } else {
+          return [...prevHistory, ...newHistoryData];
+        }
+      });
     } catch (error) {
-      console.error('加载历史数据失败:', error);
+      console.error('加载历史数据出错:', error);
     } finally {
       setLoading(false);
     }
@@ -359,15 +368,15 @@ const TodayView = () => {
         // 使用数据库中的笔记
         const dbNotes = notes.slice(0, 10).map(note => {
           console.log('Exception: 处理单个笔记:', note);
-          // 确保日期是有效的
-          const createdTime = note.created_at ? new Date(note.created_at) : new Date();
+          
+          // 使用辅助函数正确处理日期，避免时区转换问题
+          const createdTime = correctUtcDate(note.created_at);
           
           // 创建UI需要的笔记对象格式
           const uiNote: Note = {
             id: String(note.note_id), // 强制转换为字符串
             content: note.content || '',
-            // 将UTC时间转换为北京时间
-            createdAt: toBeijingTime(createdTime)
+            createdAt: createdTime
           };
           
           console.log('Exception: 转换后的笔记对象:', uiNote);
@@ -385,13 +394,12 @@ const TodayView = () => {
         // 加载更多笔记（分页）
         const startIndex = (page - 1) * 10;
         const newNotes = notes.slice(startIndex, startIndex + 10).map(note => {
-          // 确保日期是有效的
-          const createdTime = note.created_at ? new Date(note.created_at) : new Date();
+          // 使用辅助函数正确处理日期，避免时区转换问题
+          const createdTime = correctUtcDate(note.created_at);
           return {
             id: String(note.note_id), // 强制转换为字符串
             content: note.content || '',
-            // 将UTC时间转换为北京时间
-            createdAt: toBeijingTime(createdTime)
+            createdAt: createdTime
           };
         });
         
@@ -473,20 +481,18 @@ const TodayView = () => {
       console.log('Exception: 创建笔记结果:', result);
       
       if (result) {
-        // 确保日期是有效的
-        const createdTime = result.created_at ? new Date(result.created_at) : new Date();
+        // 使用辅助函数正确处理日期，避免时区转换问题
+        const createdTime = correctUtcDate(result.created_at);
         
         // 添加到本地状态
         const newNoteObj: Note = {
           id: String(result.note_id),
           content: result.content || '',
-          // 将UTC时间转换为北京时间
-          createdAt: toBeijingTime(createdTime)
+          createdAt: createdTime
         };
         
         console.log('Exception: 创建新笔记:', 
-          `UTC时间: ${createdTime.toISOString()}`, 
-          `北京时间: ${newNoteObj.createdAt.toISOString()}`,
+          `时间: ${createdTime.toLocaleString()}`,
           `笔记ID: ${newNoteObj.id}`,
           `笔记内容: ${newNoteObj.content}`
         );
@@ -516,37 +522,36 @@ const TodayView = () => {
   
   // 保存编辑的笔记
   const saveEditedNote = async () => {
-    if (editingNoteId) {
-      try {
-        // 更新数据库中的笔记
-        const success = await updateNote(editingNoteId, editingNoteContent.trim() || '');
-        
-        if (success) {
-          // 获取当前UTC时间
-          const now = new Date();
-          // 转换为北京时间
-          const beijingNow = toBeijingTime(now);
-          
-          console.log('更新笔记时间:', 
-            `UTC时间: ${now.toISOString()}`, 
-            `北京时间: ${beijingNow.toISOString()}`
-          );
-          
-          // 更新本地状态
-          setNotesState(notes => 
-            notes.map(note => 
-              note.id === editingNoteId 
-                ? { ...note, content: editingNoteContent.trim() || note.content, createdAt: beijingNow } 
-                : note
-            )
-          );
-        }
-      } catch (error) {
-        console.error('更新笔记失败:', error);
-      } finally {
-        setEditingNoteId(null);
-        setEditingNoteContent('');
-      }
+    if (!editingNoteId || !editingNoteContent.trim()) return;
+    
+    // 更新编辑中的笔记
+    const now = new Date();
+    
+    // 使用笔记ID查找对应的笔记
+    const noteIndex = notesState.findIndex(note => note.id === editingNoteId);
+    if (noteIndex === -1) return;
+    
+    // 更新本地状态
+    const updatedNotes = [...notesState];
+    updatedNotes[noteIndex] = {
+      ...updatedNotes[noteIndex],
+      content: editingNoteContent
+    };
+    setNotesState(updatedNotes);
+    
+    // 发送更新到数据库
+    try {
+      await updateNote(editingNoteId, editingNoteContent.trim());
+      
+      // 清除编辑状态
+      setEditingNoteId(null);
+      setEditingNoteContent('');
+      
+      // 可选：重新加载数据以确保与服务器同步
+      // 在这个简单的场景中可能不需要，因为我们已经更新了本地状态
+    } catch (error) {
+      console.error('保存笔记失败:', error);
+      // 错误处理逻辑，例如显示错误消息
     }
   };
   
@@ -665,48 +670,31 @@ const TodayView = () => {
   const handleCreateTask = async (timeSlot: TimeSlot) => {
     if (!newTaskText[timeSlot].trim()) return;
     
-    // 系统时间诊断
-    const serverNow = new Date(); 
-    console.log('=== 系统时间诊断 ===');
-    console.log(`服务器时间: ${serverNow.toString()}`);
-    console.log(`服务器时区: UTC${-serverNow.getTimezoneOffset()/60 > 0 ? '+' : ''}${-serverNow.getTimezoneOffset()/60}`);
-    console.log(`服务器ISO时间: ${serverNow.toISOString()}`);
-    console.log(`服务器ISO日期部分: ${serverNow.toISOString().split('T')[0]}`);
+    // 系统时间日志
+    const now = new Date(); 
+    console.log('=== 系统时间日志 ===');
+    console.log(`系统时间: ${now.toString()}`);
+    console.log(`系统ISO时间: ${now.toISOString()}`);
+    console.log(`系统日期部分: ${now.toISOString().split('T')[0]}`);
     console.log('=====================');
     
     // 创建新任务对象
     const title = newTaskText[timeSlot].trim();
     
-    // 获取原始 UTC 时间和北京时间，用于调试
-    const utcNow = new Date();
-    const beijingNow = toBeijingTime(utcNow);
+    // 直接构造日期字符串
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     
-    console.log('时间诊断 - 原始时间:', 
-      `UTC原始: ${utcNow.toISOString()}`, 
-      `UTC日期部分: ${utcNow.toISOString().split('T')[0]}`,
-      `北京原始: ${beijingNow.toISOString()}`,
-      `北京日期部分: ${beijingNow.toISOString().split('T')[0]}`
-    );
+    console.log('创建任务使用日期:', dateStr);
     
-    // 重要：直接使用北京时间的日期部分（不转回UTC）
-    // 因为我们需要的是北京时区的日期，而不是UTC时区的日期
-    const beijingYear = beijingNow.getFullYear();
-    const beijingMonth = String(beijingNow.getMonth() + 1).padStart(2, '0'); // 月份从0开始
-    const beijingDay = String(beijingNow.getDate()).padStart(2, '0');
-    
-    // 直接构造YYYY-MM-DD格式的日期字符串
-    const beijingDateStr = `${beijingYear}-${beijingMonth}-${beijingDay}`;
-    
-    console.log('创建任务使用日期:', 
-      `北京日期字符串 (将直接使用): ${beijingDateStr}`
-    );
-    
-    // 使用北京时间的日期直接创建任务
+    // 创建任务数据
     console.log('即将发送到数据库的任务数据:');
     const createData = {
       title,
       timeSlot: timeSlot,
-      scheduled_date: beijingDateStr, // 直接使用北京时间日期字符串
+      scheduled_date: dateStr,
       source_type: 'custom'
     };
     console.log(JSON.stringify(createData, null, 2));
@@ -1046,7 +1034,7 @@ const TodayView = () => {
                     <div className="whitespace-pre-wrap mb-2">{note.content}</div>
                     <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
                       <span>
-                        {note.createdAt.toLocaleDateString()} {note.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {`${note.createdAt.getFullYear()}-${String(note.createdAt.getMonth() + 1).padStart(2, '0')}-${String(note.createdAt.getDate()).padStart(2, '0')} ${String(note.createdAt.getHours()).padStart(2, '0')}:${String(note.createdAt.getMinutes()).padStart(2, '0')}`}
                       </span>
                       <div>
                         <button 
@@ -1128,18 +1116,14 @@ const TodayView = () => {
       // 找到对应原始任务
       const originalTask = sourceList.find(t => t.id === taskId || t.id === `side-${taskId}`) || taskToAdd;
       
-      // 获取原始 UTC 时间和北京时间，用于调试
-      const utcNow = new Date();
-      const beijingNow = toBeijingTime(utcNow);
+      // 获取当前系统时间（已经是UTC+8）
+      const now = new Date();
       
-      // 重要：直接使用北京时间的日期部分（不转回UTC）
-      // 因为我们需要的是北京时区的日期，而不是UTC时区的日期
-      const beijingYear = beijingNow.getFullYear();
-      const beijingMonth = String(beijingNow.getMonth() + 1).padStart(2, '0'); // 月份从0开始
-      const beijingDay = String(beijingNow.getDate()).padStart(2, '0');
-      
-      // 直接构造YYYY-MM-DD格式的日期字符串
-      const beijingDateStr = `${beijingYear}-${beijingMonth}-${beijingDay}`;
+      // 直接构造日期字符串
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
       
       const taskSourceType = source.droppableId === 'challenges' ? 'challenge' : 'template';
       
@@ -1147,7 +1131,7 @@ const TodayView = () => {
       const newEntryData = {
         title: originalTask.title,
         timeSlot: destination.droppableId as TimeSlot,
-        scheduled_date: beijingDateStr, // 直接使用北京时间日期字符串
+        scheduled_date: dateStr,
         source_type: taskSourceType as 'challenge' | 'template' | 'custom'
       };
       
@@ -1211,16 +1195,24 @@ const TodayView = () => {
     }
   };
   
-  // 添加测试笔记到界面
+  // 添加测试笔记
   const addTestNote = () => {
-    const testNote: Note = {
-      id: 'test-' + Date.now(),
-      content: '这是一条测试笔记 ' + new Date().toLocaleTimeString(),
-      createdAt: new Date()
-    };
+    // 添加测试笔记
+    const now = new Date();
     
-    console.log('Exception: 添加测试笔记到界面:', testNote);
-    setNotesState(prev => [testNote, ...prev]);
+    const content = '这是一条测试笔记 ' + now.toLocaleTimeString();
+    
+    createNote(content)
+      .then(result => {
+        if (result) {
+          console.log('测试笔记已创建, ID:', result.note_id);
+          // 重新加载笔记列表
+          loadNotesData();
+        }
+      })
+      .catch(error => {
+        console.error('创建测试笔记失败:', error);
+      });
   };
   
   return (
