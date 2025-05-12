@@ -116,10 +116,10 @@ const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
       }
     }
 
-    // 直接用JS的Date解析，日期应该已经是UTC+8
+    // 直接用JS的Date解析
     const date = new Date(isoDateString);
     
-    // 如果日期解析正确，直接返回
+    // 如果日期解析正确，直接返回，不要对ISO格式进行特殊处理，因为数据库返回的已经是UTC+8
     if (!isNaN(date.getTime())) {
       console.log(`Timestamp ${isoDateString} parsed successfully to: ${date.toLocaleString()}`);
       return date;
@@ -147,24 +147,7 @@ const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
     }
     
     // 标准ISO格式: 2025-05-11T06:43:43.237Z
-    const isoMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-    if (isoMatch) {
-      const [_, year, month, day, hours, minutes, seconds] = isoMatch;
-      console.log(`Parsing ISO format: ${isoDateString}`);
-      
-      // 创建本地日期对象
-      const newDate = new Date();
-      newDate.setFullYear(parseInt(year));
-      newDate.setMonth(parseInt(month) - 1); // 月份从0开始
-      newDate.setDate(parseInt(day));
-      newDate.setHours(parseInt(hours));
-      newDate.setMinutes(parseInt(minutes));
-      newDate.setSeconds(parseInt(seconds));
-      newDate.setMilliseconds(0);
-      
-      console.log(`Parsed to: ${newDate.toLocaleString()}`);
-      return newDate;
-    }
+    // 不需要特殊处理，因为标准Date解析已经处理过了
     
     // 仅日期格式: 2025-05-11
     const dateOnlyMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -190,6 +173,41 @@ const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
     console.error('Date parsing error:', error);
     return new Date(); // 返回当前时间作为备选
   }
+};
+
+// 辅助函数：格式化日期时间显示，智能判断是否需要调整时区
+const formatDateTime = (date: Date): string => {
+  if (!date || isNaN(date.getTime())) {
+    return '未知时间';
+  }
+  
+  // 判断是否是今天创建的笔记
+  const now = new Date();
+  const isToday = 
+    date.getFullYear() === now.getFullYear() && 
+    date.getMonth() === now.getMonth() && 
+    date.getDate() === now.getDate();
+  
+  // 判断时间是否在未来（可能是时区问题导致的）
+  const isInFuture = date > now;
+  
+  // 只有当是今天的笔记且时间看起来有问题时才调整
+  let hours = date.getHours();
+  let displayDate = date;
+  
+  if (isToday) {
+    // 创建一个日期对象的副本
+    displayDate = new Date(date);
+    
+    // 检查是否在合理范围内
+    if (hours >= 8 && hours <= 24) {
+      // 今天的笔记且时间大于8小时，可能需要减去8小时的时区差
+      hours = hours - 8;
+      displayDate.setHours(hours);
+    }
+  }
+  
+  return `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')} ${String(displayDate.getHours()).padStart(2, '0')}:${String(displayDate.getMinutes()).padStart(2, '0')}`;
 };
 
 const TodayView = () => {
@@ -634,24 +652,81 @@ const TodayView = () => {
         // 重置分页状态
         setNotesPage(1);
         
+        // 专门检查第一条笔记的时间格式
+        if (notes.length > 0) {
+          const firstNote = notes[0];
+          console.log('==== 检查第一条笔记的时间格式 ====');
+          console.log('笔记ID:', firstNote.note_id);
+          console.log('原始created_at:', firstNote.created_at, '类型:', typeof firstNote.created_at);
+          console.log('原始updated_at:', firstNote.updated_at, '类型:', typeof firstNote.updated_at);
+          
+          // 尝试直接解析 - 安全处理undefined
+          const directDate = new Date(firstNote.updated_at || Date.now());
+          console.log('直接解析结果:', directDate.toString());
+          console.log('本地格式化:', formatDateTime(directDate));
+          
+          // 检查是否有时区信息
+          const hasTimezone = typeof firstNote.updated_at === 'string' && 
+            (firstNote.updated_at.includes('Z') || firstNote.updated_at.includes('+'));
+          console.log('时间字符串包含时区信息:', hasTimezone);
+          
+          // 如果包含时区信息，尝试手动解析
+          if (hasTimezone && typeof firstNote.updated_at === 'string') {
+            try {
+              // 解析ISO格式: 2023-04-15T09:30:00.000Z
+              const parts = firstNote.updated_at.replace('Z', '').split('T');
+              const datePart = parts[0]; // YYYY-MM-DD
+              const timePart = parts[1]?.split('.')[0] || '00:00:00'; // HH:MM:SS
+              console.log('拆分后的日期部分:', datePart);
+              console.log('拆分后的时间部分:', timePart);
+              
+              // 创建本地时间
+              const [year, month, day] = datePart.split('-').map(n => parseInt(n));
+              const [hour, minute, second] = timePart.split(':').map(n => parseInt(n));
+              
+              const manualDate = new Date();
+              manualDate.setFullYear(year);
+              manualDate.setMonth(month - 1);
+              manualDate.setDate(day);
+              manualDate.setHours(hour);
+              manualDate.setMinutes(minute);
+              manualDate.setSeconds(second);
+              manualDate.setMilliseconds(0);
+              
+              console.log('手动解析结果:', manualDate.toString());
+              console.log('本地格式化:', formatDateTime(manualDate));
+            } catch (e) {
+              console.log('手动解析失败:', e);
+            }
+          }
+          console.log('==============================');
+        }
+        
         // 使用数据库中的笔记
-        const dbNotes = notes.slice(0, 10).map(note => {
-          console.log('Exception: 处理单个笔记:', note);
+        const dbNotes = notes.slice(0, 10).map((note, index) => {
+          console.log(`Exception: 处理笔记 #${index+1}:`, note);
           
           // 安全地获取笔记ID
           const noteId = note.note_id ? String(note.note_id) : String(Date.now());
           
-          // 安全地处理日期
-          let createdTime, updatedTime;
+          // 安全地处理日期 - 简化处理，避免重复转换
+          let createdTime = new Date();
+          let updatedTime = new Date();
           
           try {
-            // 尝试使用辅助函数处理日期，如果失败则使用当前时间
-            createdTime = note.created_at ? correctUtcDate(note.created_at) : new Date();
-            updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+            // 直接使用Date构造函数解析时间，不做额外处理
+            createdTime = note.created_at ? new Date(note.created_at) : new Date();
+            updatedTime = note.updated_at ? new Date(note.updated_at) : createdTime;
             
             // 再次验证日期是否有效
             if (isNaN(createdTime.getTime())) createdTime = new Date();
             if (isNaN(updatedTime.getTime())) updatedTime = createdTime;
+            
+            // 如果是第一条笔记，做特殊处理
+            if (index === 0) {
+              console.log(`笔记 #1 处理后的时间:`, updatedTime.toString());
+              console.log(`笔记 #1 格式化显示:`, formatDateTime(updatedTime));
+            }
             
           } catch (error) {
             console.log('Exception: 日期解析失败，使用当前时间', error);
@@ -716,13 +791,13 @@ const TodayView = () => {
               return null;
             }
             
-            // 安全地处理日期
+            // 安全地处理日期 - 简化处理，避免重复转换
             let createdTime, updatedTime;
             
             try {
-              // 使用辅助函数正确处理日期，避免时区转换问题
-              createdTime = note.created_at ? correctUtcDate(note.created_at) : new Date();
-              updatedTime = note.updated_at ? correctUtcDate(note.updated_at) : createdTime;
+              // 直接使用Date构造函数解析时间，不做额外处理
+              createdTime = note.created_at ? new Date(note.created_at) : new Date();
+              updatedTime = note.updated_at ? new Date(note.updated_at) : createdTime;
               
               // 验证日期是否有效
               if (isNaN(createdTime.getTime())) createdTime = new Date();
@@ -1865,7 +1940,7 @@ const TodayView = () => {
                         <div className="whitespace-pre-wrap mb-2">{note.content}</div>
                         <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
                           <span>
-                            {`${updatedAt.getFullYear()}-${String(updatedAt.getMonth() + 1).padStart(2, '0')}-${String(updatedAt.getDate()).padStart(2, '0')} ${String(updatedAt.getHours()).padStart(2, '0')}:${String(updatedAt.getMinutes()).padStart(2, '0')}`}
+                            {formatDateTime(updatedAt)}
                           </span>
                           <div>
                             <button 
