@@ -181,32 +181,37 @@ const formatDateTime = (date: Date): string => {
     return '未知时间';
   }
   
-  // 判断是否是今天创建的笔记
-  const now = new Date();
-  const isToday = 
-    date.getFullYear() === now.getFullYear() && 
-    date.getMonth() === now.getMonth() && 
-    date.getDate() === now.getDate();
+  // 创建一个新的日期对象，不修改原始日期
+  let displayDate = new Date(date);
   
-  // 判断时间是否在未来（可能是时区问题导致的）
+  // 获取当前时间
+  const now = new Date();
+  
+  // 检查日期是否在未来（可能是时区问题）
   const isInFuture = date > now;
   
-  // 只有当是今天的笔记且时间看起来有问题时才调整
-  let hours = date.getHours();
-  let displayDate = date;
-  
-  if (isToday) {
-    // 创建一个日期对象的副本
-    displayDate = new Date(date);
+  // 检查是否需要进行时区调整
+  // 如果日期看起来是UTC时间（比当前时间晚8小时左右），则调整为本地时间
+  if (isInFuture) {
+    // 创建一个日期的副本，减去8小时进行测试
+    const adjustedDate = new Date(date);
+    adjustedDate.setHours(adjustedDate.getHours() - 8);
     
-    // 检查是否在合理范围内
-    if (hours >= 8 && hours <= 24) {
-      // 今天的笔记且时间大于8小时，可能需要减去8小时的时区差
-      hours = hours - 8;
-      displayDate.setHours(hours);
+    // 计算调整前后的日期部分
+    const dateWithoutTime = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nowWithoutTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const adjustedWithoutTime = new Date(adjustedDate.getFullYear(), adjustedDate.getMonth(), adjustedDate.getDate());
+    
+    // 如果调整后的日期在今天或昨天的范围内，这很可能是一个UTC时间需要转换
+    const timeDiffInDays = Math.round((dateWithoutTime.getTime() - nowWithoutTime.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (timeDiffInDays <= 1 && timeDiffInDays >= 0) {
+      // 日期差异不超过1天，可能是时区问题，调整时间
+      displayDate = adjustedDate;
     }
   }
   
+  // 格式化日期时间为 YYYY-MM-DD HH:MM 格式
   return `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')} ${String(displayDate.getHours()).padStart(2, '0')}:${String(displayDate.getMinutes()).padStart(2, '0')}`;
 };
 
