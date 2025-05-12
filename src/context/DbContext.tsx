@@ -674,18 +674,11 @@ export function DbProvider({ children }: { children: ReactNode }) {
           throw new Error('Invalid ID format');
         }
         
-        // 明确设置 updated_at 字段为当前时间（UTC+8）
-        // 获取本地 ISO 时间字符串
-        const now = new Date();
-        const formattedTime = now.toISOString();
-        console.log('Exception: Setting updated_at to:', formattedTime);
-        
+        // 让数据库自动更新时间戳，不手动设置updated_at
+        // 这样可以避免时区问题
         const { error } = await supabase
           .from('notes')
-          .update({ 
-            content, 
-            updated_at: formattedTime 
-          })
+          .update({ content })  // 不设置 updated_at，让数据库自动处理
           .eq('note_id', noteIdNum)
           .eq('user_id', userIdNum);
         

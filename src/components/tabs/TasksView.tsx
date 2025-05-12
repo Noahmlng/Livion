@@ -529,7 +529,7 @@ const TasksView = () => {
                       className="px-4 py-2 bg-red-700/80 text-white font-display uppercase tracking-wider text-sm rounded-md"
                       onClick={handleDelete}
                     >
-                      Confirm Delete
+                      确认删除
                     </motion.button>
                   )}
                 </div>
