@@ -244,6 +244,7 @@ const TodayView = () => {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [hoveredSlot, setHoveredSlot] = useState<TimeSlot | null>(null);
+  const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const [forceUpdateKey, setForceUpdateKey] = useState(0);
   
@@ -1265,6 +1266,8 @@ const TodayView = () => {
                                 transition-colors duration-200
                                 hover:border-accent-gold
                               `}
+                              onMouseEnter={() => setHoveredTaskId(task.id)}
+                              onMouseLeave={() => setHoveredTaskId(null)}
                             >
                               {/* 拖拽手柄 - 改为明显的UI元素 */}
                               <div 
@@ -1305,7 +1308,7 @@ const TodayView = () => {
                                 </span>
                               )}
                               
-                              {!editingTaskId && (
+                              {!editingTaskId && hoveredTaskId === task.id && (
                                 <button 
                                   className="ml-2 text-red-600 hover:text-red-400"
                                   onClick={(e) => {e.stopPropagation(); handleDeleteTask(task.id);}}
