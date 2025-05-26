@@ -84,13 +84,55 @@ CREATE TABLE IF NOT EXISTS notes (
   user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   goal_id BIGINT REFERENCES goals(goal_id) ON DELETE SET NULL,
   content TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+  created_at TIMESTAMPTZ DEFAULT (now() AT TIME ZONE 'Asia/Taipei'::text) NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT (now() AT TIME ZONE 'Asia/Taipei'::text) NOT NULL
 );
 
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_notes_goal_id ON notes(goal_id);
+CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at);
+
+-- 创建函数来自动更新 updated_at 字段
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = (now() AT TIME ZONE 'Asia/Taipei'::text);
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- 为 notes 表创建触发器，在更新时自动设置 updated_at
+CREATE TRIGGER update_notes_updated_at 
+    BEFORE UPDATE ON notes 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
 
 -- 如果有需要，添加存储桶用于任务图片上传
 INSERT INTO storage.buckets (id, name) VALUES ('task_images', 'Task Images')
 ON CONFLICT DO NOTHING;
+
+-- 迁移脚本：为现有的 notes 表添加 updated_at 字段（如果不存在）
+DO $$ 
+BEGIN
+    -- 检查 updated_at 列是否存在，如果不存在则添加
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'notes' AND column_name = 'updated_at'
+    ) THEN
+        -- 添加 updated_at 列
+        ALTER TABLE notes ADD COLUMN updated_at TIMESTAMPTZ DEFAULT (now() AT TIME ZONE 'Asia/Taipei'::text) NOT NULL;
+        
+        -- 将现有记录的 updated_at 设置为 created_at 的值
+        UPDATE notes SET updated_at = created_at WHERE updated_at IS NULL;
+        
+        -- 创建索引
+        CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at);
+        
+        -- 创建触发器
+        CREATE TRIGGER update_notes_updated_at 
+            BEFORE UPDATE ON notes 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;

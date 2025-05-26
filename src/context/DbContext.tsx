@@ -674,11 +674,11 @@ export function DbProvider({ children }: { children: ReactNode }) {
           throw new Error('Invalid ID format');
         }
         
-        // 让数据库自动更新时间戳，不手动设置updated_at
-        // 这样可以避免时区问题
+        // 让数据库触发器自动更新 updated_at 时间戳
+        // 这样可以避免时区问题，确保时间戳的一致性
         const { error } = await supabase
           .from('notes')
-          .update({ content })  // 不设置 updated_at，让数据库自动处理
+          .update({ content })  // 不手动设置 updated_at，让数据库触发器自动处理
           .eq('note_id', noteIdNum)
           .eq('user_id', userIdNum);
         

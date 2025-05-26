@@ -267,18 +267,14 @@ export const noteService = {
   },
   
   async update(id: string, content: string, userId: string): Promise<void> {
-    // 使用UTC+8时间
-    const now = new Date();
-    // 格式化为ISO字符串，保留时区信息
-    const formattedTime = now.toISOString();
-    
-    console.log('Using UTC+8 time for local update:', formattedTime);
+    // 不手动设置 updated_at，让数据库触发器自动处理
+    // 这样可以确保时间戳的一致性和准确性
     
     const { error } = await supabase
       .from('notes')
       .update({ 
-        content,
-        updated_at: formattedTime
+        content
+        // updated_at 将由数据库触发器自动设置
       })
       .eq('note_id', id)
       .eq('user_id', userId);
