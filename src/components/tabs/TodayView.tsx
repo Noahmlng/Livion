@@ -60,6 +60,7 @@ interface Note {
   content: string;
   createdAt: Date | string;
   updatedAt: Date | string;
+  pinned?: boolean;
 }
 
 // 任务模板接口
@@ -213,6 +214,7 @@ const TodayView = () => {
     createNote,
     updateNote,
     deleteNote,
+    toggleNotePin,
     tasks,
     loadTasks
   } = useDb();
@@ -668,7 +670,8 @@ const TodayView = () => {
             note_id: number, 
             content: string, 
             created_at: string, 
-            updated_at: string 
+            updated_at: string,
+            pinned?: boolean
           };
           
           const noteId = typedNote.note_id ? String(typedNote.note_id) : String(Date.now());
@@ -681,7 +684,8 @@ const TodayView = () => {
             id: noteId,
             content: typedNote.content || '',
             createdAt,
-            updatedAt
+            updatedAt,
+            pinned: typedNote.pinned || false
           };
         });
         
@@ -696,8 +700,13 @@ const TodayView = () => {
           });
         }
         
-        // 确保笔记按照更新时间降序排列（使用字符串比较）
+        // 确保笔记按照置顶状态和更新时间排序（置顶的在前，然后按更新时间降序排列）
         dbNotes.sort((a, b) => {
+          // 首先按置顶状态排序
+          if (a.pinned !== b.pinned) {
+            return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+          }
+          // 然后按更新时间排序
           const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
           const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
           return timeB.localeCompare(timeA);
@@ -739,7 +748,8 @@ const TodayView = () => {
               note_id: number, 
               content: string, 
               created_at: string, 
-              updated_at: string 
+              updated_at: string,
+              pinned?: boolean
             };
             
             const noteId = typedNote.note_id ? String(typedNote.note_id) : String(Date.now());
@@ -752,7 +762,8 @@ const TodayView = () => {
               id: noteId,
               content: typedNote.content || '',
               createdAt,
-              updatedAt
+              updatedAt,
+              pinned: typedNote.pinned || false
             };
           });
         
@@ -767,8 +778,13 @@ const TodayView = () => {
         
         setNotesState(prevNotes => {
           const updatedNotes = [...prevNotes, ...newNotes];
-          // 按时间排序
+          // 按置顶状态和时间排序
           return updatedNotes.sort((a, b) => {
+            // 首先按置顶状态排序
+            if (a.pinned !== b.pinned) {
+              return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+            }
+            // 然后按更新时间排序
             const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
             const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
             return timeB.localeCompare(timeA);
@@ -1044,6 +1060,71 @@ const TodayView = () => {
       }
     } catch (error) {
       console.error('[笔记删除] 删除失败:', error);
+      // 发生错误时重新加载笔记列表
+      await loadNotesData(1, true);
+    }
+  };
+
+  // 切换笔记置顶状态
+  const toggleNotePinHandler = async (noteId: string, currentPinned: boolean) => {
+    try {
+      console.log('[笔记置顶] 开始切换置顶状态:', noteId, '当前状态:', currentPinned);
+      
+      // 保存要修改的笔记，以便在失败时恢复
+      const noteToUpdate = notesState.find(note => note.id === noteId);
+      if (!noteToUpdate) {
+        console.error('[笔记置顶] 找不到要修改的笔记');
+        return;
+      }
+      
+      const newPinnedState = !currentPinned;
+      
+      // 立即更新UI（乐观更新）
+      setNotesState(prevNotes => {
+        const updatedNotes = prevNotes.map(note => 
+          note.id === noteId ? { ...note, pinned: newPinnedState } : note
+        );
+        
+        // 重新排序：置顶的笔记在前，然后按更新时间排序
+        return updatedNotes.sort((a, b) => {
+          // 首先按置顶状态排序
+          if (a.pinned !== b.pinned) {
+            return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+          }
+          // 然后按更新时间排序
+          const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
+          const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
+          return timeB.localeCompare(timeA);
+        });
+      });
+      
+      console.log('[笔记置顶] UI已立即更新，发送到服务器');
+      
+      // 发送置顶状态切换请求到数据库，跳过自动刷新以保持乐观更新
+      const success = await toggleNotePin(noteId, newPinnedState, true);
+      
+      if (success) {
+        console.log('[笔记置顶] 服务器更新成功');
+      } else {
+        console.error('[笔记置顶] 服务器更新失败，恢复UI状态');
+        // 如果服务器更新失败，恢复笔记状态
+        setNotesState(prevNotes => {
+          const restoredNotes = prevNotes.map(note => 
+            note.id === noteId ? { ...note, pinned: currentPinned } : note
+          );
+          // 重新排序
+          return restoredNotes.sort((a, b) => {
+            if (a.pinned !== b.pinned) {
+              return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+            }
+            const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
+            const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
+            return timeB.localeCompare(timeA);
+          });
+        });
+      }
+    } catch (error) {
+      console.error('[笔记置顶] 切换失败:', error);
       // 发生错误时重新加载笔记列表
       await loadNotesData(1, true);
     }
@@ -1966,12 +2047,28 @@ const TodayView = () => {
                       </div>
                     ) : (
                       <>
-                        <div className="whitespace-pre-wrap mb-2">{note.content}</div>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="whitespace-pre-wrap flex-1">{note.content}</div>
+                          {note.pinned && (
+                            <div className="ml-2 flex-shrink-0">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-accent-gold" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 12V4a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v8H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-5h2a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-2z"/>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
                         <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
                           <span>
                             {formatDateTime(note.updatedAt)}
                           </span>
                           <div>
+                            <button 
+                              className={`mr-2 ${note.pinned ? 'text-accent-gold hover:text-accent-gold/80' : 'text-gray-400 hover:text-accent-gold'}`}
+                              onClick={(e) => { e.stopPropagation(); toggleNotePinHandler(note.id, note.pinned || false); }}
+                              title={note.pinned ? '取消置顶' : '置顶笔记'}
+                            >
+                              {note.pinned ? '取消置顶' : '置顶'}
+                            </button>
                             <button 
                               className="text-accent-gold hover:text-accent-gold/80 mr-2"
                               onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}

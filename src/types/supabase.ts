@@ -65,6 +65,7 @@ export interface Note {
   content: string;         // 笔记内容
   created_at: string;      // 创建时间
   updated_at: string;      // 更新时间
+  pinned: boolean;         // 是否置顶
 }
 
 // 辅助类型定义

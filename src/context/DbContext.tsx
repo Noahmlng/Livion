@@ -28,6 +28,7 @@ interface DbContextType {
   createNote: (content: string, skipRefresh?: boolean) => Promise<Note | null>;
   updateNote: (noteId: string, content: string, skipRefresh?: boolean) => Promise<boolean>;
   deleteNote: (noteId: string, skipRefresh?: boolean) => Promise<boolean>;
+  toggleNotePin: (noteId: string, pinned: boolean, skipRefresh?: boolean) => Promise<boolean>;
   // Loading state
   loading: boolean;
 }
@@ -775,6 +776,62 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const toggleNotePin = async (noteId: string, pinned: boolean, skipRefresh = false) => {
+    if (!userId) {
+      console.log('Exception: No userId available when trying to toggle note pin');
+      return false;
+    }
+    
+    setLoading(true);
+    try {
+      console.log('Exception: Attempting to toggle note pin:', noteId, 'pinned:', pinned, 'for userId:', userId);
+      
+      // Try to use Supabase API directly first
+      try {
+        const userIdNum = parseInt(userId);
+        const noteIdNum = parseInt(noteId);
+        
+        if (isNaN(userIdNum) || isNaN(noteIdNum)) {
+          throw new Error('Invalid ID format');
+        }
+        
+        const { error } = await supabase
+          .from('notes')
+          .update({ pinned })
+          .eq('note_id', noteIdNum)
+          .eq('user_id', userIdNum);
+        
+        if (error) {
+          console.log('Exception: Supabase toggle note pin error:', error.message);
+          throw error;
+        }
+        
+        console.log('Exception: Note pin toggled successfully');
+        // 只有在不跳过刷新时才重新加载笔记列表
+        if (!skipRefresh) {
+          await loadNotes(); // Refresh the notes list
+        }
+        return true;
+      } catch (supabaseError) {
+        console.log('Exception: Supabase API failed for note pin toggle, falling back to noteService:', supabaseError);
+      }
+      
+      // Fall back to noteService
+      await noteService.togglePin(noteId, pinned, userId);
+      console.log('Exception: Note pin toggled via noteService');
+      // 只有在不跳过刷新时才重新加载笔记列表
+      if (!skipRefresh) {
+        await loadNotes();
+      }
+      return true;
+    } catch (error) {
+      console.log('Exception: Error toggling note pin:', error);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <DbContext.Provider
       value={{
@@ -795,6 +852,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         createNote,
         updateNote,
         deleteNote,
+        toggleNotePin,
         loading,
       }}
     >

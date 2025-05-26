@@ -331,6 +331,7 @@ export const supabaseApi = {
         .from('notes')
         .select('*')
         .eq('user_id', userId)
+        .order('pinned', { ascending: false })
         .order('updated_at', { ascending: false });
       
       if (error) {
@@ -394,6 +395,22 @@ export const supabaseApi = {
       
       if (error) {
         console.error('Error deleting note:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * 切换笔记置顶状态
+     */
+    async togglePin(noteId: string | number, pinned: boolean, userId: string | number): Promise<void> {
+      const { error } = await supabase
+        .from('notes')
+        .update({ pinned })
+        .eq('note_id', noteId)
+        .eq('user_id', userId);
+      
+      if (error) {
+        console.error('Error toggling note pin:', error);
         throw error;
       }
     }

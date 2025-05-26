@@ -38,6 +38,7 @@ export interface Note {
   content: string;
   created_at?: string;
   updated_at?: string;
+  pinned?: boolean;
 }
 
 // Goal interface
@@ -249,6 +250,7 @@ export const noteService = {
       .from('notes')
       .select('*')
       .eq('user_id', userId)
+      .order('pinned', { ascending: false })
       .order('updated_at', { ascending: false });
       
     if (error) throw error;
@@ -286,6 +288,16 @@ export const noteService = {
     const { error } = await supabase
       .from('notes')
       .delete()
+      .eq('note_id', id)
+      .eq('user_id', userId);
+      
+    if (error) throw error;
+  },
+
+  async togglePin(id: string, pinned: boolean, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notes')
+      .update({ pinned })
       .eq('note_id', id)
       .eq('user_id', userId);
       
