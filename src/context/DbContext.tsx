@@ -25,9 +25,9 @@ interface DbContextType {
   // Notes
   notes: Note[];
   loadNotes: () => Promise<void>;
-  createNote: (content: string) => Promise<Note | null>;
-  updateNote: (noteId: string, content: string) => Promise<boolean>;
-  deleteNote: (noteId: string) => Promise<boolean>;
+  createNote: (content: string, skipRefresh?: boolean) => Promise<Note | null>;
+  updateNote: (noteId: string, content: string, skipRefresh?: boolean) => Promise<boolean>;
+  deleteNote: (noteId: string, skipRefresh?: boolean) => Promise<boolean>;
   // Loading state
   loading: boolean;
 }
@@ -599,7 +599,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createNote = async (content: string) => {
+  const createNote = async (content: string, skipRefresh = false) => {
     if (!userId) {
       console.log('Exception: No userId available when trying to create note');
       return null;
@@ -632,7 +632,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('Exception: Note created successfully:', data);
-        await loadNotes(); // Refresh the notes list
+        // 只有在不跳过刷新时才重新加载笔记列表
+        if (!skipRefresh) {
+          await loadNotes(); // Refresh the notes list
+        }
         return data;
       } catch (supabaseError) {
         console.log('Exception: Supabase API failed for note creation, falling back to noteService:', supabaseError);
@@ -645,7 +648,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
       };
       const result = await noteService.create(newNote, userId);
       console.log('Exception: Note created via noteService:', result);
-      await loadNotes();
+      // 只有在不跳过刷新时才重新加载笔记列表
+      if (!skipRefresh) {
+        await loadNotes();
+      }
       return result;
     } catch (error) {
       console.log('Exception: Error creating note:', error);
@@ -655,7 +661,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateNote = async (noteId: string, content: string) => {
+  const updateNote = async (noteId: string, content: string, skipRefresh = false) => {
     if (!userId) {
       console.log('Exception: No userId available when trying to update note');
       return false;
@@ -688,8 +694,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('Exception: Note updated successfully');
-        // Make sure loadNotes completes before returning
-        await loadNotes(); // Refresh the notes list
+        // 只有在不跳过刷新时才重新加载笔记列表
+        if (!skipRefresh) {
+          await loadNotes(); // Refresh the notes list
+        }
         return true;
       } catch (supabaseError) {
         console.log('Exception: Supabase API failed for note update, falling back to noteService:', supabaseError);
@@ -698,8 +706,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
       // Fall back to noteService
       await noteService.update(noteId, content, userId);
       console.log('Exception: Note updated via noteService');
-      // Make sure loadNotes completes before returning
-      await loadNotes();
+      // 只有在不跳过刷新时才重新加载笔记列表
+      if (!skipRefresh) {
+        await loadNotes();
+      }
       return true;
     } catch (error) {
       console.log('Exception: Error updating note:', error);
@@ -709,7 +719,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteNote = async (noteId: string) => {
+  const deleteNote = async (noteId: string, skipRefresh = false) => {
     if (!userId) {
       console.log('Exception: No userId available when trying to delete note');
       return false;
@@ -740,8 +750,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('Exception: Note deleted successfully');
-        // Make sure loadNotes completes before returning
-        await loadNotes(); // Refresh the notes list
+        // 只有在不跳过刷新时才重新加载笔记列表
+        if (!skipRefresh) {
+          await loadNotes(); // Refresh the notes list
+        }
         return true;
       } catch (supabaseError) {
         console.log('Exception: Supabase API failed for note deletion, falling back to noteService:', supabaseError);
@@ -750,8 +762,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
       // Fall back to noteService
       await noteService.delete(noteId, userId);
       console.log('Exception: Note deleted via noteService');
-      // Make sure loadNotes completes before returning
-      await loadNotes();
+      // 只有在不跳过刷新时才重新加载笔记列表
+      if (!skipRefresh) {
+        await loadNotes();
+      }
       return true;
     } catch (error) {
       console.log('Exception: Error deleting note:', error);

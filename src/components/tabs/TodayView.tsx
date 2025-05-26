@@ -890,9 +890,9 @@ const TodayView = () => {
       // 清空输入框
       setNewNote('');
       
-      // 然后发送到服务器
+      // 然后发送到服务器，跳过自动刷新以保持乐观更新
       console.log('[笔记创建] 发送数据到服务器');
-      const result = await createNote(optimisticNote.content);
+      const result = await createNote(optimisticNote.content, true);
       
       if (result) {
         console.log('[笔记创建] 服务器成功返回:', result);
@@ -943,21 +943,57 @@ const TodayView = () => {
   const saveEditedNote = async () => {
     if (!editingNoteId || !editingNoteContent.trim()) return;
     
-    // 发送更新到数据库
     try {
-      await updateNote(editingNoteId, editingNoteContent.trim());
+      console.log('[笔记更新] 开始更新笔记:', editingNoteId);
+      
+      // 获取当前时间用于乐观更新
+      const now = new Date();
+      const formattedNow = formatDateTime(now);
+      
+      // 立即更新UI状态（乐观更新）
+      setNotesState(prevNotes => {
+        const updatedNotes = prevNotes.map(note => {
+          if (note.id === editingNoteId) {
+            return {
+              ...note,
+              content: editingNoteContent.trim(),
+              updatedAt: formattedNow
+            };
+          }
+          return note;
+        });
+        
+        // 重新排序，将更新的笔记移到最前面
+        return updatedNotes.sort((a, b) => {
+          const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
+          const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
+          return timeB.localeCompare(timeA);
+        });
+      });
       
       // 清除编辑状态
       setEditingNoteId(null);
       setEditingNoteContent('');
       
-      // 重新加载笔记列表确保按最新的updated_at正确排序
-      console.log('重新加载笔记列表以确保正确排序');
-      await loadNotesData(1, true);
+      console.log('[笔记更新] UI已立即更新，发送到服务器');
+      
+      // 发送更新到数据库，跳过自动刷新以保持乐观更新
+      const success = await updateNote(editingNoteId, editingNoteContent.trim(), true);
+      
+      if (success) {
+        console.log('[笔记更新] 服务器更新成功');
+        // 可选：重新从数据库获取最新的时间戳以确保准确性
+        // 但为了避免页面刷新感，我们暂时不重新加载
+      } else {
+        console.error('[笔记更新] 服务器更新失败，回滚UI状态');
+        // 如果服务器更新失败，回滚UI状态
+        await loadNotesData(1, true);
+      }
       
     } catch (error) {
-      console.error('保存笔记失败:', error);
-      // 错误处理逻辑，例如显示错误消息
+      console.error('[笔记更新] 更新失败:', error);
+      // 发生错误时回滚UI状态
+      await loadNotesData(1, true);
     }
   };
   
@@ -974,15 +1010,42 @@ const TodayView = () => {
   // 删除笔记
   const deleteNoteHandler = async (noteId: string) => {
     try {
-      // 从数据库中删除
-      const success = await deleteNote(noteId);
+      console.log('[笔记删除] 开始删除笔记:', noteId);
+      
+      // 保存要删除的笔记，以便在失败时恢复
+      const noteToDelete = notesState.find(note => note.id === noteId);
+      if (!noteToDelete) {
+        console.error('[笔记删除] 找不到要删除的笔记');
+        return;
+      }
+      
+      // 立即从UI中移除笔记（乐观更新）
+      setNotesState(prevNotes => prevNotes.filter(note => note.id !== noteId));
+      
+      console.log('[笔记删除] UI已立即更新，发送到服务器');
+      
+      // 发送删除请求到数据库，跳过自动刷新以保持乐观更新
+      const success = await deleteNote(noteId, true);
       
       if (success) {
-        // 重新加载笔记列表确保正确排序
-        await loadNotesData(1, true);
+        console.log('[笔记删除] 服务器删除成功');
+      } else {
+        console.error('[笔记删除] 服务器删除失败，恢复UI状态');
+        // 如果服务器删除失败，恢复笔记到UI
+        setNotesState(prevNotes => {
+          const restoredNotes = [...prevNotes, noteToDelete];
+          // 重新排序
+          return restoredNotes.sort((a, b) => {
+            const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
+            const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
+            return timeB.localeCompare(timeA);
+          });
+        });
       }
     } catch (error) {
-      console.error('删除笔记失败:', error);
+      console.error('[笔记删除] 删除失败:', error);
+      // 发生错误时重新加载笔记列表
+      await loadNotesData(1, true);
     }
   };
   
