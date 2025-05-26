@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useValhallaTaskContext } from '../../context/ValhallaTaskContext';
 import { useDb } from '../../context/DbContext';
+import { useAppState } from '../../context/AppStateContext';
 import { 
   DragDropContext, 
   Droppable, 
@@ -216,39 +217,51 @@ const TodayView = () => {
     loadTasks
   } = useDb();
   
-  // 状态
+  // 使用应用状态管理
+  const {
+    state,
+    setChallengesCollapsed,
+    setTemplatesCollapsed,
+    setTemporaryTaskOrder,
+    setActiveTab,
+    setVisibleDays,
+    setNotesPage,
+    setHasMoreNotes,
+    setEditingTaskId,
+    setEditingNoteId,
+  } = useAppState();
+  
+  // 从 Context 获取持久化状态
+  const {
+    challengesCollapsed,
+    templatesCollapsed,
+    temporaryTaskOrder,
+    activeTab,
+    visibleDays,
+    notesPage,
+    hasMoreNotes,
+    editingTaskId,
+    editingNoteId,
+  } = state.todayView;
+  
+  // 本地状态（不需要持久化的）
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
-  const [temporaryTaskOrder, setTemporaryTaskOrder] = useState<Record<TimeSlot, string[]>>({
-    morning: [],
-    afternoon: [],
-    evening: []
-  });
   const [newTaskText, setNewTaskText] = useState({ morning: '', afternoon: '', evening: '' });
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [hoveredSlot, setHoveredSlot] = useState<TimeSlot | null>(null);
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const [forceUpdateKey, setForceUpdateKey] = useState(0);
   
-  // 任务列表折叠状态
-  const [challengesCollapsed, setChallengesCollapsed] = useState(false);
-  const [templatesCollapsed, setTemplatesCollapsed] = useState(false);
-  
-  // 下方标签页状态
-  const [activeTab, setActiveTab] = useState<'history' | 'notes'>('history');
+  // 数据状态
   const [taskHistory, setTaskHistory] = useState<TaskHistoryDay[]>([]);
-  const [visibleDays, setVisibleDays] = useState(8); // 从昨天开始的 7 天 + 1
   const [notesState, setNotesState] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState('');
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState('');
   const historyContainerRef = useRef<HTMLDivElement>(null);
   const noteContainerRef = useRef<HTMLDivElement>(null);
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const [notesPage, setNotesPage] = useState(1);
-  const [hasMoreNotes, setHasMoreNotes] = useState(true);
   const [notesLoading, setNotesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   
@@ -575,7 +588,7 @@ const TodayView = () => {
   const loadMoreHistory = () => {
     // 从当前可见天数开始加载更多（visibleDays 已经包含了偏移）
     loadHistoryData(7, visibleDays);
-    setVisibleDays(prev => prev + 7);
+    setVisibleDays(visibleDays + 7);
   };
   
   // 当数据库中的调度条目更改时更新本地状态
@@ -1117,24 +1130,22 @@ const TodayView = () => {
     
     // 后面执行完数据库创建后，也要更新临时排序状态
     if (result) {
-      setTemporaryTaskOrder(prev => ({
-        ...prev,
-        [timeSlot]: [...prev[timeSlot], result.entry_id]
-      }));
+      setTemporaryTaskOrder({
+        ...temporaryTaskOrder,
+        [timeSlot]: [...temporaryTaskOrder[timeSlot], result.entry_id]
+      });
     }
   };
   
   // 删除任务
   const handleDeleteTask = async (taskId: string) => {
     // 先从临时排序中移除
-    setTemporaryTaskOrder(prev => {
-      const newOrder = { ...prev };
-      // 在所有时间段中查找并移除该任务ID
-      Object.keys(newOrder).forEach(slot => {
-        newOrder[slot as TimeSlot] = newOrder[slot as TimeSlot].filter(id => id !== taskId);
-      });
-      return newOrder;
+    const newOrder = { ...temporaryTaskOrder };
+    // 在所有时间段中查找并移除该任务ID
+    Object.keys(newOrder).forEach(slot => {
+      newOrder[slot as TimeSlot] = newOrder[slot as TimeSlot].filter((id: string) => id !== taskId);
     });
+    setTemporaryTaskOrder(newOrder);
     
     // 然后从数据库中删除
     await deleteScheduleEntry(taskId);

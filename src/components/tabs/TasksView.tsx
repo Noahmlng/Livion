@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import defaultTaskImage from '../../assets/ac-valhalla-settlement.avif';
 import { useDb } from '../../context/DbContext';
+import { useAppState } from '../../context/AppStateContext';
 import { Task } from '../../utils/database';
 import TextareaAutosize from 'react-textarea-autosize';
 
@@ -31,11 +32,25 @@ const CompletionIcon = () => (
 const TasksView = () => {
   const { tasks, loadTasks, updateTask, deleteTask, createTask } = useDb();
   
-  // State for UI management
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [editingReward, setEditingReward] = useState(false);
-  const [editingDescription, setEditingDescription] = useState(false);
+  // 使用应用状态管理
+  const {
+    state,
+    setSelectedTaskId,
+    setEditingTitle,
+    setEditingReward,
+    setEditingDescription,
+  } = useAppState();
+  
+  // 从 Context 获取持久化状态
+  const {
+    selectedTaskId,
+    editingTitle,
+    editingReward,
+    editingDescription,
+  } = state.tasksView;
+  
+  // 根据 selectedTaskId 获取当前选中的任务
+  const selectedTask = selectedTaskId ? tasks.find(t => t.task_id === selectedTaskId) : null;
   const [editingValues, setEditingValues] = useState({
     title: '',
     reward: 0,
@@ -84,17 +99,17 @@ const TasksView = () => {
       // Find the current task in the updated task list
       const updatedTask = tasks.find(t => t.task_id === selectedTask.task_id);
       
-      // If the task still exists, update the selected task with the latest data
+      // If the task still exists, keep the current selection
       if (updatedTask) {
-        setSelectedTask(updatedTask);
+        // Task still exists, no need to update
       } else if (challengeTasks.length > 0) {
         // If the task doesn't exist, select the first task
-        setSelectedTask(challengeTasks[0]);
+        setSelectedTaskId(challengeTasks[0].task_id);
       } else {
-        setSelectedTask(null);
+        setSelectedTaskId(null);
       }
     } else if (challengeTasks.length > 0 && !selectedTask) {
-      setSelectedTask(challengeTasks[0]);
+      setSelectedTaskId(challengeTasks[0].task_id);
     }
   }, [tasks, challengeTasks]);
   
@@ -201,9 +216,9 @@ const TasksView = () => {
       if (challengeTasks.length > 0) {
         // Find the next task that isn't the deleted one
         const nextTask = challengeTasks.find(task => task.task_id !== selectedTask.task_id);
-        setSelectedTask(nextTask || null);
+        setSelectedTaskId(nextTask ? nextTask.task_id : null);
       } else {
-        setSelectedTask(null);
+        setSelectedTaskId(null);
       }
     } catch (error) {
       console.error('Error deleting task:', error);
@@ -275,7 +290,7 @@ const TasksView = () => {
       
       if (newTask) {
         await loadTasks();
-        setSelectedTask(newTask);
+        setSelectedTaskId(newTask.task_id);
       }
     } catch (error) {
       console.error('创建任务失败:', error);
@@ -323,7 +338,7 @@ const TasksView = () => {
                 key={task.task_id}
                 whileHover={{ x: 3 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setSelectedTask(task)}
+                onClick={() => setSelectedTaskId(task.task_id)}
                 className={`p-3 cursor-pointer rounded-lg transition-all relative ${
                   selectedTask?.task_id === task.task_id 
                     ? task.status === 'completed'

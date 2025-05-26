@@ -6,6 +6,7 @@ import AppHeader from './components/layout/AppHeader';
 import { ValhallaTaskProvider } from './context/ValhallaTaskContext';
 import { DbProvider } from './context/DbContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { AppStateProvider } from './context/AppStateContext';
 import Login from './components/auth/Login';
 import './App.css';
 import './components/tabs/hideScrollbar.css';
@@ -78,7 +79,8 @@ function MainApp() {
       {!showLogin && (
         <DbProvider>
           <ValhallaTaskProvider>
-            <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col hide-scrollbar">
+            <AppStateProvider>
+              <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col hide-scrollbar">
               <div className="container mx-auto px-4 py-6 flex-shrink-0">
                 <div className="relative mb-4">
                   <div className="flex justify-center">
@@ -106,6 +108,7 @@ function MainApp() {
                 </main>
               </div>
             </div>
+            </AppStateProvider>
           </ValhallaTaskProvider>
         </DbProvider>
       )}
