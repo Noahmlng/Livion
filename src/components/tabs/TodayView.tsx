@@ -501,15 +501,27 @@ const TodayView = () => {
     
     setScheduledTasks(mappedTasks);
     
-    // 初始化临时排序状态
+    // 初始化临时排序状态 - 保留现有排序，只添加新任务
     const morningTasks = mappedTasks.filter(task => task.timeSlot === 'morning').map(task => task.id);
     const afternoonTasks = mappedTasks.filter(task => task.timeSlot === 'afternoon').map(task => task.id);
     const eveningTasks = mappedTasks.filter(task => task.timeSlot === 'evening').map(task => task.id);
     
+    // 获取当前的临时排序状态
+    const currentOrder = temporaryTaskOrder;
+    
+    // 为每个时间段合并排序：保留现有排序中仍然存在的任务，然后添加新任务
+    const mergeTaskOrder = (currentSlotOrder: string[], newSlotTasks: string[]) => {
+      // 保留现有排序中仍然存在的任务
+      const existingTasks = currentSlotOrder.filter(taskId => newSlotTasks.includes(taskId));
+      // 添加新任务（不在现有排序中的）
+      const newTasks = newSlotTasks.filter(taskId => !currentSlotOrder.includes(taskId));
+      return [...existingTasks, ...newTasks];
+    };
+    
     setTemporaryTaskOrder({
-      morning: morningTasks,
-      afternoon: afternoonTasks,
-      evening: eveningTasks
+      morning: mergeTaskOrder(currentOrder.morning, morningTasks),
+      afternoon: mergeTaskOrder(currentOrder.afternoon, afternoonTasks),
+      evening: mergeTaskOrder(currentOrder.evening, eveningTasks)
     });
   };
   
@@ -1712,15 +1724,20 @@ const TodayView = () => {
         currentOrder[sourceSlot] = currentOrder[sourceSlot].filter(id => id !== taskIdToMove);
         
         if (sourceSlot === destSlot) {
-          // 在同一时间段内重新排序 - 只更新临时状态
+          // 在同一时间段内重新排序 - 更新临时状态并保持持久化
           
           // 在正确的位置插入
           const newOrder = [...currentOrder[destSlot]];
           newOrder.splice(destination.index, 0, taskIdToMove);
           currentOrder[destSlot] = newOrder;
           
-          // 仅更新临时排序状态
+          // 更新临时排序状态
           setTemporaryTaskOrder(currentOrder);
+          
+          console.log('Same slot reordering completed:', {
+            slot: sourceSlot,
+            newOrder: currentOrder[destSlot]
+          });
         } else {
           // 在不同时间段之间移动 - 更新任务的时间段属性并保存到数据库
           
