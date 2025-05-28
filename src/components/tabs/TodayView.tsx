@@ -659,7 +659,7 @@ const TodayView = () => {
     try {
       console.log(`[笔记加载] 开始加载笔记, page=${page}, reset=${reset}`);
       
-      // 加载数据库中的笔记
+      // 加载数据库中的笔记（数据库已经按正确顺序排序：置顶优先，然后按更新时间倒序）
       await loadNotes();
       console.log(`[笔记加载] 从数据库加载了 ${notes.length} 条笔记`);
       
@@ -708,23 +708,12 @@ const TodayView = () => {
             content: dbNotes[0].content.substring(0, 20) + '...',
             createdAt: dbNotes[0].createdAt,
             updatedAt: dbNotes[0].updatedAt,
+            pinned: dbNotes[0].pinned,
             formattedTime: formatDateTime(dbNotes[0].updatedAt)
           });
         }
         
-        // 确保笔记按照置顶状态和更新时间排序（置顶的在前，然后按更新时间降序排列）
-        dbNotes.sort((a, b) => {
-          // 首先按置顶状态排序
-          if (a.pinned !== b.pinned) {
-            return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-          }
-          // 然后按更新时间排序
-          const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
-          const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
-          return timeB.localeCompare(timeA);
-        });
-        
-        // 更新状态
+        // 数据库已经排序好了，直接使用，无需前端重新排序
         setNotesState(dbNotes);
         console.log('[笔记加载] 状态已更新, 完成重置加载');
         
@@ -788,20 +777,8 @@ const TodayView = () => {
           return;
         }
         
-        setNotesState(prevNotes => {
-          const updatedNotes = [...prevNotes, ...newNotes];
-          // 按置顶状态和时间排序
-          return updatedNotes.sort((a, b) => {
-            // 首先按置顶状态排序
-            if (a.pinned !== b.pinned) {
-              return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-            }
-            // 然后按更新时间排序
-            const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
-            const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
-            return timeB.localeCompare(timeA);
-          });
-        });
+        // 直接追加新笔记到现有列表，数据库已经排序好了
+        setNotesState(prevNotes => [...prevNotes, ...newNotes]);
         
         console.log('[笔记加载] 状态已更新, 完成加载更多');
         setHasMoreNotes(notes.length > startIndex + 10);
@@ -907,13 +884,21 @@ const TodayView = () => {
         id: tempId,
         content: newNote.trim(),
         createdAt: formattedNow,
-        updatedAt: formattedNow
+        updatedAt: formattedNow,
+        pinned: false  // 新创建的笔记默认不置顶
       };
       
       console.log('[笔记创建] 添加临时笔记到UI:', optimisticNote);
       
-      // 立即更新UI状态，将新笔记添加到最前面
-      setNotesState(prevNotes => [optimisticNote, ...prevNotes]);
+      // 立即更新UI状态，将新笔记添加到正确位置（非置顶笔记的最前面）
+      setNotesState(prevNotes => {
+        // 分离置顶和非置顶笔记
+        const pinnedNotes = prevNotes.filter(note => note.pinned);
+        const unpinnedNotes = prevNotes.filter(note => !note.pinned);
+        
+        // 新笔记放在非置顶笔记的最前面
+        return [...pinnedNotes, optimisticNote, ...unpinnedNotes];
+      });
       
       // 清空输入框
       setNewNote('');
@@ -927,7 +912,7 @@ const TodayView = () => {
         console.log(`[笔记创建] 服务器返回的created_at: ${result.created_at}`);
         console.log(`[笔记创建] 服务器返回的updated_at: ${result.updated_at}`);
         
-        // 用真实ID替换临时ID
+        // 用真实ID替换临时ID，并更新为服务器返回的准确数据
         setNotesState(prevNotes => {
           return prevNotes.map(note => {
             if (note.id === tempId) {
@@ -936,12 +921,16 @@ const TodayView = () => {
                 id: result.note_id.toString(),
                 content: result.content,
                 createdAt: result.created_at || formattedNow,
-                updatedAt: result.updated_at || formattedNow
+                updatedAt: result.updated_at || formattedNow,
+                pinned: result.pinned || false
               };
             }
             return note;
           });
         });
+        
+        console.log('[笔记创建] 笔记创建完成，使用乐观更新');
+        // 创建成功，无需重新加载，乐观更新已经处理了排序
       } else {
         console.error('[笔记创建] 创建失败，服务器返回空结果');
         // 从状态中移除乐观添加的笔记
@@ -950,23 +939,42 @@ const TodayView = () => {
     } catch (error) {
       console.error('[笔记创建] 创建失败:', error);
       // 发生错误时也需要从UI中移除乐观添加的笔记
-      setNotesState(prevNotes => prevNotes.filter(note => note.id.startsWith('temp-')));
+      setNotesState(prevNotes => prevNotes.filter(note => !note.id.startsWith('temp-')));
     }
   };
   
-  // 开始编辑笔记
-  const startEditingNote = (note: Note) => {
-    setEditingNoteId(note.id);
-    setEditingNoteContent(note.content);
-    
-    // 聚焦到编辑区域
-    setTimeout(() => {
-      if (noteTextareaRef.current) {
-        noteTextareaRef.current.focus();
+  // 统一的时间比较函数 - 修复排序问题
+  const compareTimeStrings = (timeA: string | Date, timeB: string | Date): number => {
+    // 将时间转换为可比较的格式
+    const getComparableTime = (time: string | Date): string => {
+      if (time instanceof Date) {
+        // Date对象转换为ISO字符串用于比较
+        return time.toISOString();
       }
-    }, 10);
+      
+      if (typeof time === 'string') {
+        // 检查是否已经是我们格式化的时间字符串 (YYYY-MM-DD HH:MM)
+        const formattedTimeRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+        if (formattedTimeRegex.test(time)) {
+          // 转换为ISO格式以便比较：YYYY-MM-DD HH:MM -> YYYY-MM-DDTHH:MM:00.000Z
+          return `${time.replace(' ', 'T')}:00.000Z`;
+        }
+        
+        // 如果是ISO格式或数据库格式，直接返回
+        return time;
+      }
+      
+      // 回退选项
+      return String(time);
+    };
+    
+    const comparableA = getComparableTime(timeA);
+    const comparableB = getComparableTime(timeB);
+    
+    // 倒序排列：最新的在前
+    return comparableB.localeCompare(comparableA);
   };
-  
+
   // 保存编辑的笔记
   const saveEditedNote = async () => {
     if (!editingNoteId || !editingNoteContent.trim()) return;
@@ -978,50 +986,96 @@ const TodayView = () => {
       const now = new Date();
       const formattedNow = formatDateTime(now);
       
-      // 立即更新UI状态（乐观更新）
+      // 获取被更新笔记的置顶状态
+      const editingNote = notesState.find(note => note.id === editingNoteId);
+      if (!editingNote) {
+        console.error('[笔记更新] 找不到要更新的笔记');
+        return;
+      }
+      
+      console.log('[笔记更新] 原始笔记:', editingNote);
+      console.log('[笔记更新] 新内容:', editingNoteContent.trim());
+      console.log('[笔记更新] 新更新时间:', formattedNow);
+      
+      // 创建更新后的笔记对象
+      const updatedNote = {
+        ...editingNote,
+        content: editingNoteContent.trim(),
+        updatedAt: formattedNow
+      };
+      
+      console.log('[笔记更新] 更新后的笔记:', updatedNote);
+      
+      // 立即更新UI状态（乐观更新）- 智能排序
       setNotesState(prevNotes => {
-        const updatedNotes = prevNotes.map(note => {
-          if (note.id === editingNoteId) {
-            return {
-              ...note,
-              content: editingNoteContent.trim(),
-              updatedAt: formattedNow
-            };
-          }
-          return note;
-        });
+        console.log('[笔记更新] 更新前的笔记列表:', prevNotes.length);
+        console.log('[笔记更新] 更新前第一条笔记时间:', prevNotes[0]?.updatedAt);
         
-        // 重新排序，将更新的笔记移到最前面
-        return updatedNotes.sort((a, b) => {
-          const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
-          const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
-          return timeB.localeCompare(timeA);
-        });
+        // 更新笔记内容和时间
+        const updatedNotes = prevNotes.map(note => 
+          note.id === editingNoteId ? updatedNote : note
+        );
+        
+        console.log('[笔记更新] 内容更新后的笔记列表:', updatedNotes.length);
+        
+        // 智能重新排序：置顶的笔记在前，然后按更新时间排序
+        const pinnedNotes = updatedNotes.filter(note => note.pinned);
+        const unpinnedNotes = updatedNotes.filter(note => !note.pinned);
+        
+        // 在各自区域内按更新时间倒序排序
+        const sortByTime = (a: Note, b: Note) => {
+          return compareTimeStrings(a.updatedAt, b.updatedAt);
+        };
+        
+        pinnedNotes.sort(sortByTime);
+        unpinnedNotes.sort(sortByTime);
+        
+        const finalNotes = [...pinnedNotes, ...unpinnedNotes];
+        console.log('[笔记更新] 最终排序后的笔记列表:', finalNotes.length);
+        console.log('[笔记更新] 排序后第一条笔记ID:', finalNotes[0]?.id);
+        console.log('[笔记更新] 排序后第一条笔记时间:', finalNotes[0]?.updatedAt);
+        console.log('[笔记更新] 排序后第一条笔记内容:', finalNotes[0]?.content.substring(0, 20));
+        
+        return finalNotes;
       });
       
-      // 清除编辑状态
+      // 立即清除编辑状态，让用户看到更新结果
       setEditingNoteId(null);
       setEditingNoteContent('');
       
-      console.log('[笔记更新] UI已立即更新，发送到服务器');
+      console.log('[笔记更新] UI已立即更新并退出编辑模式，发送到服务器');
       
       // 发送更新到数据库，跳过自动刷新以保持乐观更新
       const success = await updateNote(editingNoteId, editingNoteContent.trim(), true);
       
       if (success) {
         console.log('[笔记更新] 服务器更新成功');
-        // 可选：重新从数据库获取最新的时间戳以确保准确性
-        // 但为了避免页面刷新感，我们暂时不重新加载
+        // 更新成功，无需重新加载，乐观更新已经处理了所有状态
       } else {
-        console.error('[笔记更新] 服务器更新失败，回滚UI状态');
-        // 如果服务器更新失败，回滚UI状态
-        await loadNotesData(1, true);
+        console.error('[笔记更新] 服务器更新失败，恢复原始状态');
+        // 如果服务器更新失败，恢复原始笔记状态
+        setNotesState(prevNotes => {
+          return prevNotes.map(note => 
+            note.id === editingNoteId ? editingNote : note
+          );
+        });
       }
       
     } catch (error) {
       console.error('[笔记更新] 更新失败:', error);
-      // 发生错误时回滚UI状态
-      await loadNotesData(1, true);
+      // 发生错误时恢复原始状态
+      setNotesState(prevNotes => {
+        const editingNote = prevNotes.find(note => note.id === editingNoteId);
+        if (editingNote) {
+          return prevNotes.map(note => 
+            note.id === editingNoteId ? { ...editingNote, content: editingNote.content } : note
+          );
+        }
+        return prevNotes;
+      });
+      // 清除编辑状态
+      setEditingNoteId(null);
+      setEditingNoteContent('');
     }
   };
   
@@ -1037,15 +1091,15 @@ const TodayView = () => {
   
   // 删除笔记
   const deleteNoteHandler = async (noteId: string) => {
+    // 保存要删除的笔记，以便在失败时恢复
+    const noteToDelete = notesState.find(note => note.id === noteId);
+    if (!noteToDelete) {
+      console.error('[笔记删除] 找不到要删除的笔记');
+      return;
+    }
+    
     try {
       console.log('[笔记删除] 开始删除笔记:', noteId);
-      
-      // 保存要删除的笔记，以便在失败时恢复
-      const noteToDelete = notesState.find(note => note.id === noteId);
-      if (!noteToDelete) {
-        console.error('[笔记删除] 找不到要删除的笔记');
-        return;
-      }
       
       // 立即从UI中移除笔记（乐观更新）
       setNotesState(prevNotes => prevNotes.filter(note => note.id !== noteId));
@@ -1057,23 +1111,46 @@ const TodayView = () => {
       
       if (success) {
         console.log('[笔记删除] 服务器删除成功');
+        // 删除成功，无需重新排序，已从UI中移除
       } else {
         console.error('[笔记删除] 服务器删除失败，恢复UI状态');
-        // 如果服务器删除失败，恢复笔记到UI
+        // 如果服务器删除失败，恢复笔记到UI的正确位置
         setNotesState(prevNotes => {
-          const restoredNotes = [...prevNotes, noteToDelete];
-          // 重新排序
-          return restoredNotes.sort((a, b) => {
-            const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
-            const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
-            return timeB.localeCompare(timeA);
-          });
+          // 重新插入已删除的笔记到正确位置
+          const allNotes = [...prevNotes, noteToDelete];
+          const pinnedNotes = allNotes.filter(note => note.pinned);
+          const unpinnedNotes = allNotes.filter(note => !note.pinned);
+          
+          // 在各自区域内按更新时间排序，使用统一的比较函数
+          const sortByTime = (a: Note, b: Note) => {
+            return compareTimeStrings(a.updatedAt, b.updatedAt);
+          };
+          
+          pinnedNotes.sort(sortByTime);
+          unpinnedNotes.sort(sortByTime);
+          
+          return [...pinnedNotes, ...unpinnedNotes];
         });
       }
     } catch (error) {
       console.error('[笔记删除] 删除失败:', error);
-      // 发生错误时重新加载笔记列表
-      await loadNotesData(1, true);
+      // 发生错误时恢复原始状态
+      setNotesState(prevNotes => {
+        // 重新插入已删除的笔记到正确位置
+        const allNotes = [...prevNotes, noteToDelete];
+        const pinnedNotes = allNotes.filter(note => note.pinned);
+        const unpinnedNotes = allNotes.filter(note => !note.pinned);
+        
+        // 在各自区域内按更新时间排序，使用统一的比较函数
+        const sortByTime = (a: Note, b: Note) => {
+          return compareTimeStrings(a.updatedAt, b.updatedAt);
+        };
+        
+        pinnedNotes.sort(sortByTime);
+        unpinnedNotes.sort(sortByTime);
+        
+        return [...pinnedNotes, ...unpinnedNotes];
+      });
     }
   };
 
@@ -1098,16 +1175,18 @@ const TodayView = () => {
         );
         
         // 重新排序：置顶的笔记在前，然后按更新时间排序
-        return updatedNotes.sort((a, b) => {
-          // 首先按置顶状态排序
-          if (a.pinned !== b.pinned) {
-            return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-          }
-          // 然后按更新时间排序
-          const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
-          const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
-          return timeB.localeCompare(timeA);
-        });
+        const pinnedNotes = updatedNotes.filter(note => note.pinned);
+        const unpinnedNotes = updatedNotes.filter(note => !note.pinned);
+        
+        // 在各自区域内按更新时间倒序排序
+        const sortByTime = (a: Note, b: Note) => {
+          return compareTimeStrings(a.updatedAt, b.updatedAt);
+        };
+        
+        pinnedNotes.sort(sortByTime);
+        unpinnedNotes.sort(sortByTime);
+        
+        return [...pinnedNotes, ...unpinnedNotes];
       });
       
       console.log('[笔记置顶] UI已立即更新，发送到服务器');
@@ -1117,6 +1196,7 @@ const TodayView = () => {
       
       if (success) {
         console.log('[笔记置顶] 服务器更新成功');
+        // 置顶状态更新成功，无需重新加载，乐观更新已经处理了排序
       } else {
         console.error('[笔记置顶] 服务器更新失败，恢复UI状态');
         // 如果服务器更新失败，恢复笔记状态
@@ -1124,21 +1204,33 @@ const TodayView = () => {
           const restoredNotes = prevNotes.map(note => 
             note.id === noteId ? { ...note, pinned: currentPinned } : note
           );
-          // 重新排序
-          return restoredNotes.sort((a, b) => {
-            if (a.pinned !== b.pinned) {
-              return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-            }
-            const timeA = typeof a.updatedAt === 'string' ? a.updatedAt : (a.updatedAt as Date).toISOString();
-            const timeB = typeof b.updatedAt === 'string' ? b.updatedAt : (b.updatedAt as Date).toISOString();
-            return timeB.localeCompare(timeA);
-          });
+          
+          // 重新排序，使用统一的比较函数
+          const pinnedNotes = restoredNotes.filter(note => note.pinned);
+          const unpinnedNotes = restoredNotes.filter(note => !note.pinned);
+          
+          const sortByTime = (a: Note, b: Note) => {
+            return compareTimeStrings(a.updatedAt, b.updatedAt);
+          };
+          
+          pinnedNotes.sort(sortByTime);
+          unpinnedNotes.sort(sortByTime);
+          
+          return [...pinnedNotes, ...unpinnedNotes];
         });
       }
     } catch (error) {
       console.error('[笔记置顶] 切换失败:', error);
-      // 发生错误时重新加载笔记列表
-      await loadNotesData(1, true);
+      // 发生错误时恢复原始状态
+      setNotesState(prevNotes => {
+        const noteToUpdate = prevNotes.find(note => note.id === noteId);
+        if (noteToUpdate) {
+          return prevNotes.map(note => 
+            note.id === noteId ? { ...noteToUpdate, pinned: currentPinned } : note
+          );
+        }
+        return prevNotes;
+      });
     }
   };
   
@@ -1793,6 +1885,19 @@ const TodayView = () => {
       .catch(error => {
         console.error('创建测试笔记失败:', error);
       });
+  };
+
+  // 开始编辑笔记
+  const startEditingNote = (note: Note) => {
+    setEditingNoteId(note.id);
+    setEditingNoteContent(note.content);
+    
+    // 聚焦到编辑区域
+    setTimeout(() => {
+      if (noteTextareaRef.current) {
+        noteTextareaRef.current.focus();
+      }
+    }, 10);
   };
 
   return (

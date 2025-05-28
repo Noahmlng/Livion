@@ -571,7 +571,8 @@ export function DbProvider({ children }: { children: ReactNode }) {
           .from('notes')
           .select('*')
           .eq('user_id', userIdNum)
-          .order('updated_at', { ascending: false });
+          .order('pinned', { ascending: false })  // 置顶的在前
+          .order('updated_at', { ascending: false });  // 然后按更新时间倒序
         
         if (error) {
           console.log('Exception: Supabase query error:', error.message);
