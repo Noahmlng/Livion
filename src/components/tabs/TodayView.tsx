@@ -1081,9 +1081,13 @@ const TodayView = () => {
   
   // 处理笔记编辑时的键盘事件
   const handleNoteKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
+    if (e.key === 'Enter' && e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
       saveEditedNote();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       setEditingNoteId(null);
       setEditingNoteContent('');
     }
@@ -2118,12 +2122,18 @@ const TodayView = () => {
                   placeholder="记录你的想法和灵感..."
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && createNewNote()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.metaKey) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      createNewNote();
+                    }
+                  }}
                 />
                 <button 
                   className="absolute bottom-3 right-3 text-accent-gold/80 hover:text-accent-gold"
                   onClick={createNewNote}
-                  title="保存笔记 (Ctrl + Enter)"
+                  title="保存笔记 (Cmd + Enter)"
                 >
                   {/* 纸飞机图标 - 顺时针旋转90度 */}
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">

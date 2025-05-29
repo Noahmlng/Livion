@@ -14,9 +14,7 @@ const log = (...args: any[]) => {
  * Sign in with password
  */
 export const signIn = async (password: string): Promise<User> => {
-  log('Signing in with password:', password);
-  console.log('Querying database with password:', password);
-  
+    
   try {
     // 使用统一的 API 接口
     const user = await supabaseApi.users.getByPassword(password);
