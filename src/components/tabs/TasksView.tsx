@@ -29,6 +29,150 @@ const CompletionIcon = () => (
   </div>
 );
 
+// Priority Energy Bar Component
+const PriorityEnergyBar = ({ 
+  priority, 
+  onPriorityChange, 
+  disabled = false 
+}: { 
+  priority: number; 
+  onPriorityChange: (newPriority: number) => void;
+  disabled?: boolean;
+}) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragPriority, setDragPriority] = useState(priority);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  const maxPriority = 10; // Allow up to 10 priority levels
+
+  // Function to determine priority colors (same as in main component)
+  const getPriorityColor = (index: number, currentPriority: number) => {
+    if (index < currentPriority && index < 6) {
+      return [
+        'bg-amber-300', // Priority 1
+        'bg-orange-400', // Priority 2
+        'bg-rose-400', // Priority 3
+        'bg-red-500', // Priority 4
+        'bg-red-600', // Priority 5
+        'bg-red-700', // Priority 6
+      ][index] || 'bg-red-700';
+    }
+    
+    if (index < currentPriority && index >= 6) {
+      return 'bg-red-800'; // Higher priorities use dark red
+    }
+    
+    return 'bg-gray-600/30'; // Empty slots
+  };
+
+  const calculatePriorityFromPosition = (clientX: number) => {
+    if (!barRef.current) return priority;
+    
+    const rect = barRef.current.getBoundingClientRect();
+    const relativeX = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, relativeX / rect.width));
+    return Math.max(1, Math.ceil(percentage * maxPriority));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (disabled) return;
+    
+    e.preventDefault();
+    setIsDragging(true);
+    const newPriority = calculatePriorityFromPosition(e.clientX);
+    setDragPriority(newPriority);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (disabled || isDragging) return;
+    
+    const newPriority = calculatePriorityFromPosition(e.clientX);
+    onPriorityChange(newPriority);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      
+      const newPriority = calculatePriorityFromPosition(e.clientX);
+      setDragPriority(newPriority);
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging) {
+        onPriorityChange(dragPriority);
+        setIsDragging(false);
+      }
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragPriority, onPriorityChange]);
+
+  const currentPriority = isDragging ? dragPriority : priority;
+
+  return (
+    <div className="flex flex-col items-start">
+      <div 
+        ref={barRef}
+        className={`relative w-24 h-4 bg-slate-800/60 rounded border border-slate-700/40 overflow-hidden ${
+          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+        }`}
+        onMouseDown={handleMouseDown}
+        onClick={handleClick}
+      >
+        {/* Priority segments */}
+        {[...Array(maxPriority)].map((_, index) => (
+          <div
+            key={index}
+            className={`absolute top-0 h-full transition-all duration-150 ${
+              getPriorityColor(index, currentPriority)
+            }`}
+            style={{
+              left: `${(index / maxPriority) * 100}%`,
+              width: `${100 / maxPriority}%`,
+              borderRight: index < maxPriority - 1 ? '1px solid rgba(0,0,0,0.1)' : 'none'
+            }}
+          />
+        ))}
+        
+        {/* Drag indicator */}
+        {isDragging && (
+          <div 
+            className="absolute top-0 w-0.5 h-full bg-cyan-300 shadow-lg transition-all duration-75"
+            style={{
+              left: `${(dragPriority / maxPriority) * 100}%`,
+              transform: 'translateX(-50%)'
+            }}
+          />
+        )}
+        
+        {/* Current priority indicator */}
+        {!isDragging && (
+          <div 
+            className="absolute top-0 w-0.5 h-full bg-cyan-200 shadow-md transition-all duration-200"
+            style={{
+              left: `${(currentPriority / maxPriority) * 100}%`,
+              transform: 'translateX(-50%)'
+            }}
+          />
+        )}
+      </div>
+      
+      <div className="text-[10px] text-slate-400 mt-1 font-mono">
+        {currentPriority}
+      </div>
+    </div>
+  );
+};
+
 const TasksView = () => {
   const { tasks, loadTasks, updateTask, deleteTask, createTask } = useDb();
   
@@ -188,6 +332,12 @@ const TasksView = () => {
       const newPriority = task.priority + 1;
       await handleTaskUpdate(taskId, { priority: newPriority });
     }
+  };
+
+  // Handler for priority energy bar
+  const handlePriorityChange = async (newPriority: number) => {
+    if (!selectedTask) return;
+    await handleTaskUpdate(selectedTask.task_id.toString(), { priority: newPriority });
   };
   
   // Handler for completing task with effect
@@ -505,48 +655,58 @@ const TasksView = () => {
                   )}
                 </div>
                 
-                <div className="flex justify-end gap-3 mt-auto pt-3 border-t border-cyan-800/30">
-                  {!showDeleteConfirm ? (
-                    <>
+                <div className="flex justify-between items-end gap-3 mt-auto pt-3 border-t border-cyan-800/30">
+                  {/* Priority Energy Bar on the left */}
+                  <PriorityEnergyBar
+                    priority={selectedTask.priority}
+                    onPriorityChange={handlePriorityChange}
+                    disabled={isUpdating}
+                  />
+                  
+                  {/* Action buttons on the right */}
+                  <div className="flex gap-3">
+                    {!showDeleteConfirm ? (
+                      <>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="px-4 py-2 bg-transparent text-red-400 border border-red-500/50 font-display uppercase tracking-wider text-sm rounded-md"
+                          onClick={confirmDelete}
+                        >
+                          删除
+                        </motion.button>
+                        
+                        {selectedTask.status === 'completed' ? (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md border border-cyan-600/30"
+                            onClick={completeTask}
+                          >
+                            恢复任务
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md shadow-md border border-cyan-600/30"
+                            onClick={completeTask}
+                          >
+                            完成任务
+                          </motion.button>
+                        )}
+                      </>
+                    ) : (
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="px-4 py-2 bg-transparent text-red-400 border border-red-500/50 font-display uppercase tracking-wider text-sm rounded-md"
-                        onClick={confirmDelete}
+                        className="px-4 py-2 bg-red-700/80 text-white font-display uppercase tracking-wider text-sm rounded-md"
+                        onClick={handleDelete}
                       >
-                        删除
+                        确认删除
                       </motion.button>
-                      
-                      {selectedTask.status === 'completed' ? (
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md border border-cyan-600/30"
-                          onClick={completeTask}
-                        >
-                          恢复任务
-                        </motion.button>
-                      ) : (
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md shadow-md border border-cyan-600/30"
-                          onClick={completeTask}
-                        >
-                          完成任务
-                        </motion.button>
-                      )}
-                    </>
-                  ) : (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-4 py-2 bg-red-700/80 text-white font-display uppercase tracking-wider text-sm rounded-md"
-                      onClick={handleDelete}
-                    >
-                      确认删除
-                    </motion.button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </motion.div>
             </AnimatePresence>

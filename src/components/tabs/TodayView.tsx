@@ -18,6 +18,7 @@ import afternoonBg from '../../assets/afternoon-bg.jpg';
 import eveningBg from '../../assets/evening-bg.jpg';
 import './hideScrollbar.css';
 import './dragStyles.css';
+import './optimizedTextarea.css';
 import supabase from '../../utils/supabase';
 import { useDragDropFix } from '../../utils/dragFix';
 
@@ -261,9 +262,11 @@ const TodayView = () => {
   const [notesState, setNotesState] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState('');
   const [editingNoteContent, setEditingNoteContent] = useState('');
+  const [newNoteFocused, setNewNoteFocused] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
   const noteContainerRef = useRef<HTMLDivElement>(null);
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const newNoteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [notesLoading, setNotesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   
@@ -1904,6 +1907,142 @@ const TodayView = () => {
     }, 10);
   };
 
+  // 自动调整textarea高度的函数
+  const adjustTextareaHeight = (textarea: HTMLTextAreaElement, targetLines?: number, minLines?: number) => {
+    // 重置高度以获取正确的scrollHeight
+    textarea.style.height = 'auto';
+    
+    // 获取最小和最大高度限制
+    const defaultMinHeight = parseInt(textarea.style.minHeight) || 40;
+    const maxHeight = parseInt(textarea.style.maxHeight) || 200;
+    
+    // 计算新高度
+    let scrollHeight = textarea.scrollHeight;
+    
+    // 如果指定了目标行数，计算目标高度
+    if (targetLines) {
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 24;
+      const padding = parseInt(getComputedStyle(textarea).paddingTop) + parseInt(getComputedStyle(textarea).paddingBottom);
+      const targetHeight = (lineHeight * targetLines) + padding;
+      
+      // 使用目标高度和当前内容高度中的较大值
+      scrollHeight = Math.max(scrollHeight, targetHeight);
+    }
+    
+    // 如果指定了最小行数，计算最小高度
+    let minHeight = defaultMinHeight;
+    if (minLines) {
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 24;
+      const padding = parseInt(getComputedStyle(textarea).paddingTop) + parseInt(getComputedStyle(textarea).paddingBottom);
+      const minLineHeight = (lineHeight * minLines) + padding;
+      minHeight = Math.max(minLineHeight, defaultMinHeight);
+    }
+    
+    const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+    
+    // 设置新高度
+    textarea.style.height = newHeight + 'px';
+    
+    // 动态调整滚动条显示
+    if (scrollHeight > maxHeight) {
+      textarea.style.overflowY = 'auto';
+      textarea.classList.add('scrollable');
+    } else {
+      textarea.style.overflowY = 'hidden';
+      textarea.classList.remove('scrollable');
+    }
+  };
+
+  // 处理新笔记输入变化
+  const handleNewNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewNote(e.target.value);
+    // 使用 requestAnimationFrame 确保DOM更新后再调整高度
+    requestAnimationFrame(() => {
+      // 如果处于聚焦状态，保持至少5行的高度
+      const minLines = newNoteFocused ? 5 : undefined;
+      adjustTextareaHeight(e.target, undefined, minLines);
+    });
+  };
+
+  // 处理编辑笔记输入变化
+  const handleEditNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditingNoteContent(e.target.value);
+    // 使用 requestAnimationFrame 确保DOM更新后再调整高度
+    requestAnimationFrame(() => {
+      adjustTextareaHeight(e.target);
+    });
+  };
+
+  // 处理新建笔记聚焦
+  const handleNewNoteFocus = () => {
+    setNewNoteFocused(true);
+    
+    // 延迟执行，让CSS的聚焦样式先生效
+    setTimeout(() => {
+      if (newNoteTextareaRef.current) {
+        const textarea = newNoteTextareaRef.current;
+        
+        // 计算当前行数 - 使用offsetHeight而不是scrollHeight
+        const computedStyle = getComputedStyle(textarea);
+        const lineHeight = parseInt(computedStyle.lineHeight) || 24;
+        const paddingTop = parseInt(computedStyle.paddingTop) || 0;
+        const paddingBottom = parseInt(computedStyle.paddingBottom) || 0;
+        const totalPadding = paddingTop + paddingBottom;
+        
+        // 使用当前显示高度计算行数
+        const currentHeight = textarea.offsetHeight;
+        const contentHeight = currentHeight - totalPadding;
+        const currentLines = Math.ceil(contentHeight / lineHeight);
+        
+        console.log('聚焦时的高度信息:', {
+          currentHeight,
+          lineHeight,
+          totalPadding,
+          contentHeight,
+          currentLines
+        });
+        
+        // 如果当前行数小于5行，则展开到5行
+        if (currentLines < 5) {
+          adjustTextareaHeight(textarea, 5);
+        }
+      }
+    }, 50); // 给一点时间让CSS动画类生效
+  };
+
+  // 处理新建笔记失焦
+  const handleNewNoteBlur = () => {
+    setNewNoteFocused(false);
+    
+    // 延迟恢复高度，让CSS动画先执行
+    setTimeout(() => {
+      if (newNoteTextareaRef.current) {
+        const textarea = newNoteTextareaRef.current;
+        
+        // 失焦时不再有最小行数限制，让高度根据内容自适应
+        adjustTextareaHeight(textarea);
+      }
+    }, 100); // 稍微延迟一点，让聚焦样式的动画完成
+  };
+
+  // 在组件挂载后调整初始高度
+  useEffect(() => {
+    if (newNoteTextareaRef.current) {
+      adjustTextareaHeight(newNoteTextareaRef.current);
+    }
+  }, []);
+
+  // 在编辑模式切换时调整高度
+  useEffect(() => {
+    if (noteTextareaRef.current && editingNoteId) {
+      setTimeout(() => {
+        if (noteTextareaRef.current) {
+          adjustTextareaHeight(noteTextareaRef.current);
+        }
+      }, 10);
+    }
+  }, [editingNoteId, editingNoteContent]);
+
   return (
     <DragDropContext 
       onDragStart={handleDragStart}
@@ -2114,14 +2253,16 @@ const TodayView = () => {
           </div>
         ) : (
           <div className="flex flex-col">
-            {/* 新建笔记区域 */}
-            <div className="mb-4 flex-shrink-0 bg-bg-panel p-4 rounded-md border border-border-metal">
-              <div className="flex flex-col relative">
+            {/* 新建笔记区域 - 优化后的单一边框设计 */}
+            <div className={`mb-4 flex-shrink-0 border border-border-metal rounded-md overflow-hidden transition-all duration-200 focus-within:border-accent-gold hover:border-accent-gold/50 textarea-container note-input-container ${newNoteFocused ? 'focused' : ''}`}>
+              <div className="relative bg-bg-panel">
                 <textarea
-                  className="w-full p-3 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
+                  ref={newNoteTextareaRef}
+                  className={`w-full p-4 pr-12 optimized-textarea auto-resize-textarea text-text-primary placeholder-text-secondary leading-relaxed ${newNoteFocused ? 'focused' : ''}`}
+                  style={{ minHeight: '40px', maxHeight: '200px' }}
                   placeholder="记录你的想法和灵感..."
                   value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
+                  onChange={handleNewNoteChange}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && e.metaKey) {
                       e.preventDefault();
@@ -2129,14 +2270,21 @@ const TodayView = () => {
                       createNewNote();
                     }
                   }}
+                  onFocus={handleNewNoteFocus}
+                  onBlur={handleNewNoteBlur}
                 />
+                {/* 发送按钮 - 位置优化 */}
                 <button 
-                  className="absolute bottom-3 right-3 text-accent-gold/80 hover:text-accent-gold"
+                  className={`absolute bottom-3 right-3 p-1 rounded-md send-button transition-all duration-200 ${
+                    newNote.trim() 
+                      ? 'text-accent-gold hover:text-accent-gold/80 hover:bg-accent-gold/10 scale-100 opacity-100' 
+                      : 'text-text-secondary/30 scale-90 opacity-50 cursor-not-allowed'
+                  }`}
                   onClick={createNewNote}
-                  title="保存笔记 (Cmd + Enter)"
+                  disabled={!newNote.trim()}
+                  title={newNote.trim() ? "保存笔记 (Cmd + Enter)" : "输入内容后可保存"}
                 >
-                  {/* 纸飞机图标 - 顺时针旋转90度 */}
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                 </button>
@@ -2155,22 +2303,26 @@ const TodayView = () => {
                   >
                     {editingNoteId === note.id ? (
                       <div className="flex flex-col relative">
-                        <textarea
-                          ref={noteTextareaRef}
-                          className="w-full p-2 border border-border-metal rounded-md min-h-[80px] focus:outline-none focus:border-accent-gold transparent-textarea"
-                          value={editingNoteContent}
-                          onChange={(e) => setEditingNoteContent(e.target.value)}
-                          onKeyDown={handleNoteKeyDown}
-                        />
-                        <div className="flex justify-end mt-2">
+                        {/* 编辑模式的textarea也使用相同的优化设计 */}
+                        <div className="border border-border-metal rounded-md overflow-hidden focus-within:border-accent-gold textarea-container">
+                          <textarea
+                            ref={noteTextareaRef}
+                            className="w-full p-3 optimized-textarea auto-resize-textarea bg-bg-dark text-text-primary leading-relaxed"
+                            style={{ minHeight: '80px', maxHeight: '300px' }}
+                            value={editingNoteContent}
+                            onChange={handleEditNoteChange}
+                            onKeyDown={handleNoteKeyDown}
+                          />
+                        </div>
+                        <div className="flex justify-end mt-3 gap-2">
                           <button 
-                            className="px-3 py-1 bg-red-600/70 text-white rounded-md mr-2 text-sm"
+                            className="px-3 py-1.5 bg-text-secondary/20 text-text-secondary rounded-md text-sm hover:bg-text-secondary/30 transition-colors"
                             onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
                           >
                             取消
                           </button>
                           <button 
-                            className="px-3 py-1 bg-accent-gold/80 text-white rounded-md text-sm"
+                            className="px-3 py-1.5 bg-accent-gold text-text-on-accent rounded-md text-sm hover:bg-accent-gold/90 transition-colors"
                             onClick={saveEditedNote}
                           >
                             保存
@@ -2180,7 +2332,7 @@ const TodayView = () => {
                     ) : (
                       <>
                         <div className="flex items-start justify-between mb-2">
-                          <div className="whitespace-pre-wrap flex-1">{note.content}</div>
+                          <div className="whitespace-pre-wrap flex-1 leading-relaxed">{note.content}</div>
                           {note.pinned && (
                             <div className="ml-2 flex-shrink-0">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-accent-gold" fill="currentColor" viewBox="0 0 24 24">
