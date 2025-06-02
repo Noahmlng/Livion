@@ -1922,7 +1922,7 @@ const TodayView = () => {
           {/* 右侧任务列表（上下排列） */}
           <div className="flex flex-col gap-4 transition-all duration-300">
             {/* 支线任务列表 */}
-            <div className={`valhalla-panel overflow-hidden flex-1 flex ${challengesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
+            <div className={`valhalla-panel overflow-hidden flex h-[400px] ${challengesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
               <div className={`flex items-center justify-center ${challengesCollapsed ? 'w-full' : 'hidden'}`}>
                 <button 
                   className="p-1 hover:bg-sidebar-item-hover-bg rounded"
@@ -1937,8 +1937,8 @@ const TodayView = () => {
                   </span>
                 </button>
               </div>
-              <div className={`flex-1 ${challengesCollapsed ? 'hidden' : 'block'}`}>
-                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2">
+              <div className={`flex-1 ${challengesCollapsed ? 'hidden' : 'flex flex-col'}`}>
+                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2 flex-shrink-0">
                   <h3 className="font-display text-lg text-accent-gold">
                     支线任务
                   </h3>
@@ -1957,7 +1957,7 @@ const TodayView = () => {
                     <div 
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="space-y-2 p-1 h-[175px] overflow-y-auto hide-scrollbar"
+                      className="space-y-2 p-1 flex-1 overflow-y-auto hide-scrollbar"
                     >
                       {loadingTasks ? (
                         <div className="text-center py-4">
@@ -2006,7 +2006,7 @@ const TodayView = () => {
             </div>
             
             {/* 日常任务模板 */}
-            <div className={`valhalla-panel overflow-hidden flex-1 flex ${templatesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
+            <div className={`valhalla-panel overflow-hidden flex h-[400px] ${templatesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
               <div className={`flex items-center justify-center ${templatesCollapsed ? 'w-full' : 'hidden'}`}>
                 <button 
                   className="p-1 hover:bg-sidebar-item-hover-bg rounded"
@@ -2021,8 +2021,8 @@ const TodayView = () => {
                   </span>
                 </button>
               </div>
-              <div className={`flex-1 ${templatesCollapsed ? 'hidden' : 'block'}`}>
-                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2">
+              <div className={`flex-1 ${templatesCollapsed ? 'hidden' : 'flex flex-col'}`}>
+                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2 flex-shrink-0">
                   <h3 className="font-display text-lg text-accent-gold">
                     日常任务
                   </h3>
@@ -2041,7 +2041,7 @@ const TodayView = () => {
                     <div 
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="space-y-2 p-1 h-[175px] overflow-y-auto hide-scrollbar"
+                      className="space-y-2 p-1 flex-1 overflow-y-auto hide-scrollbar"
                     >
                       {loadingTemplates ? (
                         <div className="text-center py-4">
