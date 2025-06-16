@@ -212,6 +212,7 @@ const TodayView = () => {
     deleteScheduleEntry,
     notes,
     loadNotes,
+    searchNotes,
     createNote,
     updateNote,
     deleteNote,
@@ -269,6 +270,11 @@ const TodayView = () => {
   const newNoteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [notesLoading, setNotesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // 笔记搜索相关状态
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   
   // 从数据库获取的任务模板
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
@@ -630,6 +636,23 @@ const TodayView = () => {
     }
   }, [scheduleEntries]);
   
+  // 当笔记状态更新时，如果正在搜索则重新搜索
+  useEffect(() => {
+    if (isSearching && searchQuery.trim()) {
+      const performSearch = async () => {
+        try {
+          const searchResults = await searchNotes(searchQuery);
+          const convertedResults = searchResults.map(convertDbNoteToUINote);
+          setFilteredNotes(convertedResults);
+        } catch (error) {
+          console.error('重新搜索笔记失败:', error);
+          setFilteredNotes([]);
+        }
+      };
+      performSearch();
+    }
+  }, [searchQuery, isSearching]);
+  
   // 监听历史容器的滚动事件，实现无限加载
   useEffect(() => {
     const handleScroll = () => {
@@ -977,7 +1000,55 @@ const TodayView = () => {
     // 倒序排列：最新的在前
     return comparableB.localeCompare(comparableA);
   };
+  
+  // 将数据库笔记格式转换为UI格式
+  const convertDbNoteToUINote = (dbNote: any): Note => {
+    const noteId = dbNote.note_id ? String(dbNote.note_id) : String(Date.now());
+    const createdAt = dbNote.created_at || getCurrentDateTimeString();
+    const updatedAt = dbNote.updated_at || createdAt;
+    
+    return {
+      id: noteId,
+      content: dbNote.content || '',
+      createdAt,
+      updatedAt,
+      pinned: dbNote.pinned || false
+    };
+  };
 
+  // 处理搜索输入
+  const handleSearchChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    setIsSearching(!!query.trim());
+    
+    if (query.trim()) {
+      try {
+        const searchResults = await searchNotes(query);
+        // 将数据库格式转换为UI格式
+        const convertedResults = searchResults.map(convertDbNoteToUINote);
+        setFilteredNotes(convertedResults);
+      } catch (error) {
+        console.error('搜索笔记失败:', error);
+        setFilteredNotes([]);
+      }
+    } else {
+      setFilteredNotes([]);
+    }
+  };
+  
+  // 清除搜索
+  const clearSearch = () => {
+    setSearchQuery('');
+    setIsSearching(false);
+    setFilteredNotes([]);
+  };
+  
+  // 获取要显示的笔记列表
+  const getDisplayNotes = (): Note[] => {
+    return isSearching ? filteredNotes : notesState;
+  };
+  
   // 保存编辑的笔记
   const saveEditedNote = async () => {
     if (!editingNoteId || !editingNoteContent.trim()) return;
@@ -2231,19 +2302,56 @@ const TodayView = () => {
         </div>
         
         {/* 标签选择器 */}
-        <div className="flex border-b border-border-metal mt-2">
-          <button
-            className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
-            onClick={() => setActiveTab('history')}
-          >
-            历史记录
-          </button>
-          <button
-            className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
-            onClick={() => setActiveTab('notes')}
-          >
-            笔记
-          </button>
+        <div className="flex justify-between items-center border-b border-border-metal mt-2">
+          <div className="flex">
+            <button
+              className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
+              onClick={() => setActiveTab('history')}
+            >
+              历史记录
+            </button>
+            <button
+              className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
+              onClick={() => setActiveTab('notes')}
+            >
+              笔记
+            </button>
+          </div>
+          
+          {/* 搜索框 - 只在笔记标签页显示 */}
+          {activeTab === 'notes' && (
+            <div className="flex-shrink-0 w-80 mr-4">
+              <div className="border border-border-metal rounded-md overflow-hidden transition-all duration-200 focus-within:border-accent-gold hover:border-accent-gold/50 bg-bg-panel">
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 bg-transparent text-text-primary placeholder-text-secondary text-sm"
+                    placeholder="搜索笔记内容..."
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                  />
+                  {/* 搜索图标或清除按钮 */}
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    {searchQuery ? (
+                      <button
+                        onClick={clearSearch}
+                        className="p-1 text-text-secondary hover:text-accent-gold transition-colors"
+                        title="清除搜索"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
         {/* 标签页内容 - 不再有外框限制 */}
@@ -2294,7 +2402,7 @@ const TodayView = () => {
             {/* 笔记列表 - 直接在主滚动区域内，没有外框限制 */}
             <div className="space-y-3" ref={noteContainerRef}>
               {/* 确保遍历前笔记状态有效 */}
-              {Array.isArray(notesState) && notesState.map((note) => {
+              {Array.isArray(getDisplayNotes()) && getDisplayNotes().map((note) => {
                 return (
                   <div
                     key={note.id}
@@ -2379,15 +2487,24 @@ const TodayView = () => {
                 </div>
               )}
               
-              {!notesLoading && notesState.length === 0 && (
+              {!notesLoading && getDisplayNotes().length === 0 && (
                 <div className="text-center py-8 bg-bg-panel rounded-md border border-border-metal">
-                  <p className="text-text-secondary text-lg">暂无笔记</p>
-                  <p className="text-text-secondary text-sm mt-2">点击上方输入框输入并创建新笔记</p>
+                  {isSearching ? (
+                    <>
+                      <p className="text-text-secondary text-lg">未找到匹配的笔记</p>
+                      <p className="text-text-secondary text-sm mt-2">尝试调整搜索关键词</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-text-secondary text-lg">暂无笔记</p>
+                      <p className="text-text-secondary text-sm mt-2">点击上方输入框输入并创建新笔记</p>
+                    </>
+                  )}
                 </div>
               )}
               
               {/* 触发加载更多的元素 */}
-              {hasMoreNotes && (
+              {hasMoreNotes && !isSearching && (
                 <div 
                   className="py-2 text-center cursor-pointer hover:bg-bg-panel hover:text-accent-gold rounded-md border border-border-metal"
                   onClick={handleLoadMoreClick}

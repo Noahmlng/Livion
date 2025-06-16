@@ -25,6 +25,7 @@ interface DbContextType {
   // Notes
   notes: Note[];
   loadNotes: () => Promise<void>;
+  searchNotes: (query: string) => Promise<Note[]>;
   createNote: (content: string, skipRefresh?: boolean) => Promise<Note | null>;
   updateNote: (noteId: string, content: string, skipRefresh?: boolean) => Promise<boolean>;
   deleteNote: (noteId: string, skipRefresh?: boolean) => Promise<boolean>;
@@ -601,6 +602,60 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const searchNotes = async (query: string): Promise<Note[]> => {
+    if (!userId) {
+      console.log('Exception: No userId available when trying to search notes');
+      return [];
+    }
+    
+    if (!query.trim()) {
+      return [];
+    }
+    
+    try {
+      console.log('Exception: Searching notes for userId:', userId, 'with query:', query);
+      
+      // Try to use Supabase API first
+      try {
+        const userIdNum = parseInt(userId);
+        
+        if (isNaN(userIdNum)) {
+          throw new Error('Invalid user ID format');
+        }
+        
+        // 使用 Supabase 的全文搜索功能
+        const { data, error } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', userIdNum)
+          .ilike('content', `%${query}%`)  // 模糊搜索内容
+          .order('pinned', { ascending: false })  // 置顶的在前
+          .order('updated_at', { ascending: false });  // 然后按更新时间倒序
+        
+        if (error) {
+          console.log('Exception: Supabase search error:', error.message);
+          throw error;
+        }
+        
+        console.log('Exception: Notes search successful, count:', data?.length || 0);
+        return data || [];
+      } catch (supabaseError) {
+        console.log('Exception: Supabase API failed for search, falling back to local DB:', supabaseError);
+      }
+      
+      // Fall back to noteService (本地搜索)
+      const allNotes = await noteService.getAll(userId);
+      const filteredNotes = allNotes.filter(note => 
+        note.content.toLowerCase().includes(query.toLowerCase())
+      );
+      console.log('Exception: Notes searched via noteService, count:', filteredNotes.length);
+      return filteredNotes;
+    } catch (error) {
+      console.log('Exception: Error searching notes:', error);
+      return [];
+    }
+  };
+
   const createNote = async (content: string, skipRefresh = false) => {
     if (!userId) {
       console.log('Exception: No userId available when trying to create note');
@@ -850,6 +905,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
         deleteScheduleEntry,
         notes,
         loadNotes,
+        searchNotes,
         createNote,
         updateNote,
         deleteNote,
