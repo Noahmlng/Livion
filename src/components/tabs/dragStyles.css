@@ -1,0 +1,72 @@
+/* Styles to improve react-beautiful-dnd functionality */
+
+/* Disable user selection during drag operations */
+.react-draggable, 
+.react-draggable-dragging, 
+[data-rbd-draggable-id], 
+[data-rbd-draggable-context-id] {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Set proper cursor for draggable elements */
+[data-rbd-draggable-id] {
+  cursor: grab !important;
+}
+
+[data-rbd-draggable-id]:active {
+  cursor: grabbing !important;
+}
+
+/* Ensure proper z-index for dragging elements */
+[data-rbd-draggable-id][data-rbd-dragging="true"] {
+  z-index: 9999 !important;
+}
+
+/* 拖拽相关的样式 */
+
+/* 确保拖拽句柄显示抓取光标 */
+[data-rbd-drag-handle-draggable-id] {
+  cursor: grab !important;
+}
+
+/* 拖动中的项目样式 */
+[data-rbd-draggable-id][data-rbd-dragging="true"] {
+  cursor: grabbing !important;
+  z-index: 9999 !important;
+  opacity: 0.8;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+/* 拖放区域在拖拽经过时高亮 */
+[data-rbd-droppable-id][data-rbd-droppable-context-id] {
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+/* 增强拖拽手柄可见性 */
+.drag-handle {
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
+}
+
+.drag-item:hover .drag-handle {
+  opacity: 1;
+}
+
+/* 解决iOS触摸拖拽问题 */
+html, body {
+  touch-action: manipulation;
+}
+
+/* 防止文本在拖拽时被选中 */
+[data-rbd-draggable-id],
+[data-rbd-drag-handle-draggable-id] {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+} 

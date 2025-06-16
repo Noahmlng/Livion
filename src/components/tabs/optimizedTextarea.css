@@ -1,0 +1,125 @@
+/* 优化的textarea样式 - 参考Flomo体验 */
+
+/* 清除textarea的默认样式 */
+.optimized-textarea {
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.6;
+  transition: all 0.2s ease;
+  overflow-y: hidden;
+}
+
+/* 清除所有可能的默认样式 */
+.optimized-textarea:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+/* 确保placeholder样式一致 */
+.optimized-textarea::placeholder {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.optimized-textarea:focus::placeholder {
+  opacity: 0.4;
+}
+
+/* 容器的focus状态 */
+.textarea-container {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.textarea-container:hover {
+  border-color: rgba(255, 198, 41, 0.5) !important;
+}
+
+.textarea-container:focus-within {
+  border-color: rgb(255, 198, 41) !important;
+  box-shadow: 0 0 0 3px rgba(255, 198, 41, 0.1);
+}
+
+/* 滚动条样式优化 */
+.optimized-textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+.optimized-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.optimized-textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 198, 41, 0.3);
+  border-radius: 2px;
+}
+
+.optimized-textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 198, 41, 0.5);
+}
+
+/* 确保高度变化平滑 */
+.auto-resize-textarea {
+  transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: hidden;
+}
+
+/* 聚焦状态的特殊动效 */
+.auto-resize-textarea.focused {
+  transition: height 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* 当内容溢出时显示滚动条 */
+.auto-resize-textarea.scrollable {
+  overflow-y: auto;
+}
+
+/* 发送按钮悬停效果增强 */
+.send-button {
+  transform-origin: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.send-button:hover:not(:disabled) {
+  transform: scale(1.1) rotate(45deg);
+}
+
+.send-button:active:not(:disabled) {
+  transform: scale(0.95) rotate(45deg);
+}
+
+/* 禁用状态的按钮 */
+.send-button:disabled {
+  pointer-events: none;
+}
+
+/* 优化输入容器的整体外观 */
+.note-input-container {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.01) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.note-input-container:hover {
+  background: linear-gradient(135deg, rgba(255, 198, 41, 0.03) 0%, rgba(255, 198, 41, 0.01) 100%);
+  border-color: rgba(255, 198, 41, 0.3);
+  transform: translateY(-1px);
+}
+
+.note-input-container:focus-within {
+  background: linear-gradient(135deg, rgba(255, 198, 41, 0.05) 0%, rgba(255, 198, 41, 0.02) 100%);
+  border-color: rgba(255, 198, 41, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 198, 41, 0.1), 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* 聚焦状态的容器额外效果 */
+.note-input-container.focused {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px rgba(255, 198, 41, 0.15), 0 6px 20px rgba(0, 0, 0, 0.15);
+} 

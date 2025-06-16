@@ -1,26 +1,35 @@
 export const theme = {
   colors: {
-    background: '#0f0f12',
-    foreground: '#eaeaea',
-    primary: '#63c6d4',
-    secondary: '#7e4e90',
-    accent: '#e0a639',
-    success: '#56a65a',
-    danger: '#d64545',
-    warning: '#e0a639',
-    info: '#63c6d4',
-    dark: '#1f1f24',
-    darkBrown: '#2c2318',
-    lightBrown: '#5a4a33',
-    parchment: '#f2e8c0',
-    leather: '#8b5a2b',
-    wood: '#614126',
-    stone: '#a3a3a3',
-    gold: '#ffcc00',
-    silver: '#c0c0c0',
-    copper: '#b87333',
-    tabDefault: '#5a4a33',
-    tabActive: '#e0a639',
+    /*
+     * Northern mythology warm palette - inspired by torches, parchment and scrolls
+     */
+    background: '#1a1d21',            // Deep dark background (保持黑灰色)
+    foreground: '#e0e0e0',            // Light text (保持淡白色)
+    primary: '#e0a639',               // Amber/gold primary / highlight
+    secondary: '#a36627',             // Burnt orange for secondary actions
+    accent: '#e0a639',                // Amber/gold accent
+    success: '#56a65a',               // Kept as-is
+    danger: '#d64545',                // Kept as-is
+    warning: '#e9973b',               // Warm amber warning
+    info: '#d8a45e',                  // Soft amber for info
+
+    /* Warm neutrals for the earthy/parchment feel */
+    dark: '#0f1115',                  // 保持深黑色
+    darkBrown: '#1e2228',             // 恢复深灰色
+    lightBrown: '#2a2d31',            // 恢复灰色面板
+    parchment: '#2a2d31',             // 恢复灰色卡片
+    leather: '#3d4147',               // 恢复灰色边框
+    wood: '#4a4e54',                  // 恢复深灰色边框
+    stone: '#a3a3a3',                 // 恢复中性灰色
+
+    /* Metallic colors with warm tints */
+    gold: '#e0a639',                  // Amber/gold highlight (仅高亮处使用温暖色)
+    silver: '#c5c0b8',                // Warmer silver
+    copper: '#b87333',                // Rich copper
+
+    /* Tabs */
+    tabDefault: '#2a2d31',            // 恢复灰色不活跃标签
+    tabActive: '#e0a639',             // Active tab - amber highlight
   },
   fonts: {
     heading: '"Cinzel", serif',
