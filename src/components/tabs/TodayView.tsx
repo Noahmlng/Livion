@@ -1,5 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Card, 
+  CardBody, 
+  CardHeader, 
+  Button, 
+  Input, 
+  Textarea, 
+  Tabs, 
+  Tab, 
+  Chip, 
+  Modal, 
+  ModalContent, 
+  ModalHeader, 
+  ModalBody, 
+  ModalFooter, 
+  useDisclosure,
+  Divider,
+  ScrollShadow,
+  Switch,
+  Badge,
+  Avatar,
+  Spacer
+} from '@heroui/react';
 import { useValhallaTaskContext } from '../../context/ValhallaTaskContext';
 import { useDb } from '../../context/DbContext';
 import { useAppState } from '../../context/AppStateContext';
@@ -144,8 +167,19 @@ const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
 // 自定义日期格式化函数，直接处理字符串，避免时区问题
 const formatDateTime = (date: Date | string): string => {
   try {
+    // 首先检查输入是否为空或未定义
+    if (!date || date === 'null' || date === 'undefined') {
+      console.warn('[formatDateTime] 输入为空或未定义:', date);
+      return getCurrentDateTimeString();
+    }
+    
     // 如果传入的是字符串
     if (typeof date === 'string') {
+      // 如果已经是我们的目标格式，直接返回
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(date)) {
+        return date;
+      }
+      
       // PostgreSQL格式: 2023-04-15 10:30:45.123456+08
       if (date.includes(' ') && !date.includes('T')) {
         // 这种格式已经是北京时间，直接提取年月日时分即可
@@ -155,12 +189,23 @@ const formatDateTime = (date: Date | string): string => {
         return `${datePart} ${timePart}`;
       }
       
-      // ISO格式: 2023-04-15T10:30:00.000Z
+      // ISO格式: 2023-04-15T10:30:00.000Z (需要修正服务器错误存储的时区)
       if (date.includes('T')) {
-        const parts = date.split('T');
-        const datePart = parts[0]; // YYYY-MM-DD
-        const timePart = parts[1].split('.')[0].substring(0, 5); // 只取HH:MM
-        return `${datePart} ${timePart}`;
+        // 服务器存储的UTC时间实际上是北京时间，需要减去8小时修正
+        const serverDate = new Date(date);
+        if (isNaN(serverDate.getTime())) {
+          console.warn('[formatDateTime] 无效的ISO日期字符串:', date);
+          return getCurrentDateTimeString();
+        }
+        const correctedDate = new Date(serverDate.getTime() - 8 * 60 * 60 * 1000);
+        
+        const year = correctedDate.getFullYear();
+        const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(correctedDate.getDate()).padStart(2, '0');
+        const hours = String(correctedDate.getHours()).padStart(2, '0');
+        const minutes = String(correctedDate.getMinutes()).padStart(2, '0');
+        
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
       }
       
       // 如果已经是 YYYY-MM-DD 格式
@@ -168,34 +213,231 @@ const formatDateTime = (date: Date | string): string => {
         return `${date} 00:00`;
       }
       
-      // 其他未知格式，返回原始字符串
-      return date;
+      // 尝试直接解析字符串
+      const parsedDate = new Date(date);
+      if (!isNaN(parsedDate.getTime())) {
+        const year = parsedDate.getFullYear();
+        const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(parsedDate.getDate()).padStart(2, '0');
+        const hours = String(parsedDate.getHours()).padStart(2, '0');
+        const minutes = String(parsedDate.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
+      }
+      
+      // 其他未知格式，返回当前时间
+      console.warn('[formatDateTime] 未知的日期字符串格式:', date);
+      return getCurrentDateTimeString();
     }
 
-    // 如果是无效的日期对象
-    if (!date || isNaN(date.getTime())) {
-      return '未知时间';
+    // 如果是Date对象但无效
+    if (date instanceof Date && isNaN(date.getTime())) {
+      console.warn('[formatDateTime] 无效的Date对象:', date);
+      return getCurrentDateTimeString();
     }
 
-    // 如果是Date对象，直接使用本地时间格式化（不进行任何时区转换）
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+    // 如果是有效的Date对象，确保使用真正的本地时间（北京时间）
+    if (date instanceof Date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    }
     
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
+    // 未知类型，返回当前时间
+    console.warn('[formatDateTime] 未知的输入类型:', typeof date, date);
+    return getCurrentDateTimeString();
   } catch (error) {
-    console.error('日期格式化错误:', error, date);
-    return String(date);
+    console.error('[formatDateTime] 日期格式化错误:', error, date);
+    return getCurrentDateTimeString();
   }
 };
 
-// Helper function to generate a date string with current time
+// Helper function to generate a date string with current time (确保使用本地时间)
 function getCurrentDateTimeString(): string {
   const now = new Date();
+  // 直接使用本地时间，不做任何时区转换
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
+
+  // Notes专用的时间格式化函数
+const formatNoteTime = (date: Date | string): string => {
+  try {
+    console.log('[formatNoteTime] 函数被调用，输入:', date, typeof date);
+    
+    // 首先检查输入是否为空、未定义或特殊值
+    if (!date || date === 'null' || date === 'undefined' || date === '未知时间') {
+      console.warn('[formatNoteTime] 输入为空或特殊值:', date);
+      // 返回当前时间的HH:MM格式
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+    
+    let noteDate: Date;
+    
+    // 处理字符串格式的日期
+    if (typeof date === 'string') {
+      // formatDateTime生成的格式: YYYY-MM-DD HH:MM (这个已经是本地时间，不需要转换)
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(date)) {
+        console.log('[formatNoteTime] 处理本地格式:', date);
+        const parts = date.split(' ');
+        const datePart = parts[0]; // YYYY-MM-DD
+        const timePart = parts[1]; // HH:MM
+        
+        console.log('[formatNoteTime] datePart:', datePart, 'timePart:', timePart);
+        
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute] = timePart.split(':').map(Number);
+        
+        console.log('[formatNoteTime] 解析的数值:', { year, month, day, hour, minute });
+        
+        // 验证解析出的数值是否有效
+        if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute) ||
+            year < 1970 || month < 1 || month > 12 || day < 1 || day > 31 || 
+            hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+          console.error('[formatNoteTime] 解析出的数值无效:', { year, month, day, hour, minute });
+          // 返回当前时间的HH:MM格式
+          const now = new Date();
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          return `${hours}:${minutes}`;
+        }
+        
+        // 这个时间已经是本地时间，直接使用
+        noteDate = new Date(year, month - 1, day, hour, minute, 0);
+        console.log('[formatNoteTime] 创建的Date对象:', noteDate);
+        console.log('[formatNoteTime] Date对象是否有效:', !isNaN(noteDate.getTime()));
+      }
+      // PostgreSQL格式: 2023-04-15 10:30:45.123456+08
+      else if (date.includes(' ') && !date.includes('T')) {
+        // 数据库中已经是UTC+8时间，直接解析即可
+        const parts = date.split(' ');
+        const datePart = parts[0]; // YYYY-MM-DD
+        const timePart = parts[1].split('.')[0]; // HH:MM:SS
+        
+        // 直接使用这个时间，不做时区转换
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute, second] = timePart.split(':').map(Number);
+        
+        // 验证解析出的数值是否有效
+        if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute)) {
+          console.error('[formatNoteTime] PostgreSQL格式解析失败:', { year, month, day, hour, minute });
+          // 返回当前时间的HH:MM格式
+          const now = new Date();
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          return `${hours}:${minutes}`;
+        }
+        
+        noteDate = new Date(year, month - 1, day, hour, minute, second || 0);
+      }
+      // ISO格式: 2023-04-15T10:30:00.000Z (需要修正服务器错误存储的时区)
+      else if (date.includes('T')) {
+        console.log('[formatNoteTime] 处理ISO格式:', date);
+        // 服务器存储的UTC时间实际上是北京时间，需要减去8小时修正
+        const serverDate = new Date(date);
+        console.log('[formatNoteTime] 原始serverDate:', serverDate);
+        console.log('[formatNoteTime] serverDate.getTime():', serverDate.getTime());
+        console.log('[formatNoteTime] serverDate 是否有效:', !isNaN(serverDate.getTime()));
+        
+        if (isNaN(serverDate.getTime())) {
+          console.error('[formatNoteTime] ISO格式日期无效:', date);
+          // 返回当前时间的HH:MM格式
+          const now = new Date();
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          return `${hours}:${minutes}`;
+        }
+        
+        noteDate = new Date(serverDate.getTime() - 8 * 60 * 60 * 1000);
+        console.log('[formatNoteTime] 修正后的时间:', noteDate);
+        console.log('[formatNoteTime] 修正后时间是否有效:', !isNaN(noteDate.getTime()));
+        console.log('[formatNoteTime] 修正后的 getHours():', noteDate.getHours());
+      }
+      // 如果已经是 YYYY-MM-DD 格式
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const [year, month, day] = date.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) {
+          console.error('[formatNoteTime] YYYY-MM-DD格式解析失败:', { year, month, day });
+          // 返回当前时间的HH:MM格式
+          const now = new Date();
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          return `${hours}:${minutes}`;
+        }
+        noteDate = new Date(year, month - 1, day);
+      }
+      // 其他格式尝试直接解析
+      else {
+        noteDate = new Date(date);
+        if (isNaN(noteDate.getTime())) {
+          console.error('[formatNoteTime] 字符串直接解析失败:', date);
+          // 返回当前时间的HH:MM格式
+          const now = new Date();
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          return `${hours}:${minutes}`;
+        }
+      }
+    } else if (date instanceof Date) {
+      noteDate = date;
+    } else {
+      console.error('[formatNoteTime] 未知的输入类型:', typeof date, date);
+      // 返回当前时间的HH:MM格式
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // 如果是无效的日期对象
+    if (!noteDate || isNaN(noteDate.getTime())) {
+      console.error('[formatNoteTime] 日期无效！noteDate:', noteDate, '输入:', date);
+      // 返回当前时间的HH:MM格式
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // 获取当前日期（用于比较）
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    
+    // 获取笔记日期（仅日期部分）
+    const noteDay = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
+    
+    // 判断是今天、昨天还是更早
+    if (noteDay.getTime() === today.getTime()) {
+      // 今天：显示 HH:MM
+      const hours = String(noteDate.getHours()).padStart(2, '0');
+      const minutes = String(noteDate.getMinutes()).padStart(2, '0');
+      const result = `${hours}:${minutes}`;
+      console.log('[formatNoteTime] 最终结果:', result);
+      return result;
+    } else if (noteDay.getTime() === yesterday.getTime()) {
+      // 昨天：显示 Yesterday
+      return 'Yesterday';
+    } else {
+      // 前天及之前：显示 MM-DD
+      const month = String(noteDate.getMonth() + 1).padStart(2, '0');
+      const day = String(noteDate.getDate()).padStart(2, '0');
+      return `${month}-${day}`;
+    }
+  } catch (error) {
+    console.error('[formatNoteTime] 笔记时间格式化错误:', error, date);
+    // 发生错误时返回当前时间的HH:MM格式
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+};
 
 const TodayView = () => {
   // Apply React 18 compatibility fix for drag-and-drop
@@ -275,6 +517,12 @@ const TodayView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // 笔记详细编辑弹窗状态
+  const { isOpen: isNoteModalOpen, onOpen: onNoteModalOpen, onOpenChange: onNoteModalOpenChange } = useDisclosure();
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [modalNoteContent, setModalNoteContent] = useState('');
+  const modalTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // 从数据库获取的任务模板
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
@@ -683,7 +931,7 @@ const TodayView = () => {
     setNotesLoading(true);
     
     try {
-      console.log(`[笔记加载] 开始加载笔记, page=${page}, reset=${reset}`);
+      console.log(`[笔记加载] 开始加载笔记, page=${page}, reset=${reset}, 每页20条`);
       
       // 加载数据库中的笔记（数据库已经按正确顺序排序：置顶优先，然后按更新时间倒序）
       await loadNotes();
@@ -702,7 +950,7 @@ const TodayView = () => {
         setNotesPage(1);
         
         // 使用数据库中的笔记，保留原始时间字符串
-        const dbNotes = notes.slice(0, 10).map(note => {
+        const dbNotes = notes.slice(0, 20).map(note => {
           // 确保笔记对象符合预期类型
           const typedNote = note as { 
             note_id: number, 
@@ -714,9 +962,9 @@ const TodayView = () => {
           
           const noteId = typedNote.note_id ? String(typedNote.note_id) : String(Date.now());
           
-          // 处理时间，确保是字符串格式
-          const createdAt = typedNote.created_at || getCurrentDateTimeString();
-          const updatedAt = typedNote.updated_at || createdAt;
+          // 处理时间，使用formatDateTime确保正确的时区转换
+          const createdAt = typedNote.created_at ? formatDateTime(typedNote.created_at) : getCurrentDateTimeString();
+          const updatedAt = typedNote.updated_at ? formatDateTime(typedNote.updated_at) : createdAt;
           
           return {
             id: noteId,
@@ -744,12 +992,13 @@ const TodayView = () => {
         console.log('[笔记加载] 状态已更新, 完成重置加载');
         
         // 设置hasMoreNotes
-        const hasMore = notes.length > 10;
+        const hasMore = notes.length > 20;
         setHasMoreNotes(hasMore);
       } else {
         // 加载更多笔记（分页）
-        const startIndex = (page - 1) * 10;
-        console.log(`[笔记加载] 加载更多: startIndex=${startIndex}, 总数=${notes.length}`);
+        const pageSize = 20;
+        const startIndex = (page - 1) * pageSize;
+        console.log(`[笔记加载] 加载更多: 第${page}页, startIndex=${startIndex}, 总数=${notes.length}`);
         
         if (startIndex >= notes.length) {
           console.log('[笔记加载] 没有更多笔记可加载');
@@ -763,7 +1012,7 @@ const TodayView = () => {
         console.log(`[笔记加载] 当前已加载ID: ${Array.from(existingNoteIds).join(', ')}`);
         
         const newNotes = notes
-          .slice(startIndex, startIndex + 10)
+          .slice(startIndex, startIndex + pageSize)
           .filter(note => {
             // 类型转换
             const typedNote = note as { note_id: number };
@@ -781,9 +1030,9 @@ const TodayView = () => {
             
             const noteId = typedNote.note_id ? String(typedNote.note_id) : String(Date.now());
             
-            // 处理时间，确保是字符串格式
-            const createdAt = typedNote.created_at || getCurrentDateTimeString();
-            const updatedAt = typedNote.updated_at || createdAt;
+            // 处理时间，使用formatDateTime确保正确的时区转换
+            const createdAt = typedNote.created_at ? formatDateTime(typedNote.created_at) : getCurrentDateTimeString();
+            const updatedAt = typedNote.updated_at ? formatDateTime(typedNote.updated_at) : createdAt;
             
             return {
               id: noteId,
@@ -807,7 +1056,7 @@ const TodayView = () => {
         setNotesState(prevNotes => [...prevNotes, ...newNotes]);
         
         console.log('[笔记加载] 状态已更新, 完成加载更多');
-        setHasMoreNotes(notes.length > startIndex + 10);
+        setHasMoreNotes(notes.length > startIndex + pageSize);
       }
     } catch (error) {
       console.error('[笔记加载] 加载失败:', error);
@@ -847,45 +1096,46 @@ const TodayView = () => {
   
   // 监听全局滚动事件，检测到底部时加载更多笔记
   useEffect(() => {
-    // 只在笔记标签页激活时添加监听
-    if (activeTab !== 'notes' || !hasMoreNotes) return;
+    // 只在笔记标签页激活时、有更多笔记时、非搜索模式下添加监听
+    if (activeTab !== 'notes' || !hasMoreNotes || isSearching) return;
 
-    // 全局滚动事件处理函数
+    let scrollTimeout: NodeJS.Timeout;
+
+    // 全局滚动事件处理函数（带防抖）
     const handleGlobalScroll = () => {
-      // 计算滚动位置
-      const scrollHeight = document.documentElement.scrollHeight;
-      const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
-      
-      console.log('Exception: 全局滚动检测:', {
-        scrollTop,
-        scrollHeight,
-        clientHeight,
-        distanceToBottom: scrollHeight - scrollTop - clientHeight
-      });
-      
-      // 当距离底部150px以内时加载更多
-      if (scrollHeight - scrollTop - clientHeight < 150 && !notesLoading && hasMoreNotes) {
-        console.log('Exception: 滚动接近底部，自动加载更多笔记');
-        const nextPage = notesPage + 1;
-        setNotesPage(nextPage);
-        loadNotesData(nextPage, false);
-      }
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        // 计算滚动位置
+        const scrollHeight = document.documentElement.scrollHeight;
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+        
+        const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+        
+        // 当距离底部200px以内时加载更多（增加触发距离，提前加载）
+        if (distanceToBottom < 200 && !notesLoading && hasMoreNotes && !isSearching) {
+          console.log('[自动加载] 滚动接近底部，自动加载更多笔记');
+          const nextPage = notesPage + 1;
+          setNotesPage(nextPage);
+          loadNotesData(nextPage, false);
+        }
+      }, 100); // 100ms防抖
     };
     
     // 添加滚动事件监听
-    window.addEventListener('scroll', handleGlobalScroll);
+    window.addEventListener('scroll', handleGlobalScroll, { passive: true });
     
     // 清理函数
     return () => {
+      clearTimeout(scrollTimeout);
       window.removeEventListener('scroll', handleGlobalScroll);
     };
-  }, [activeTab, notesPage, hasMoreNotes, notesLoading]);
+  }, [activeTab, notesPage, hasMoreNotes, notesLoading, isSearching]);
   
   // 点击加载更多笔记
   const handleLoadMoreClick = () => {
-    if (!notesLoading && hasMoreNotes) {
-      console.log('Exception: 点击加载更多按钮');
+    if (!notesLoading && hasMoreNotes && !isSearching) {
+      console.log('[手动加载] 点击加载更多按钮，加载20条笔记');
       const nextPage = notesPage + 1;
       setNotesPage(nextPage);
       loadNotesData(nextPage, false);
@@ -942,12 +1192,12 @@ const TodayView = () => {
         setNotesState(prevNotes => {
           return prevNotes.map(note => {
             if (note.id === tempId) {
-              // 替换为服务器返回的数据，保留原始时间字符串
+              // 替换为服务器返回的数据，使用formatDateTime处理时间字符串
               return {
                 id: result.note_id.toString(),
                 content: result.content,
-                createdAt: result.created_at || formattedNow,
-                updatedAt: result.updated_at || formattedNow,
+                createdAt: result.created_at ? formatDateTime(result.created_at) : formattedNow,
+                updatedAt: result.updated_at ? formatDateTime(result.updated_at) : formattedNow,
                 pinned: result.pinned || false
               };
             }
@@ -1004,8 +1254,8 @@ const TodayView = () => {
   // 将数据库笔记格式转换为UI格式
   const convertDbNoteToUINote = (dbNote: any): Note => {
     const noteId = dbNote.note_id ? String(dbNote.note_id) : String(Date.now());
-    const createdAt = dbNote.created_at || getCurrentDateTimeString();
-    const updatedAt = dbNote.updated_at || createdAt;
+    const createdAt = dbNote.created_at ? formatDateTime(dbNote.created_at) : getCurrentDateTimeString();
+    const updatedAt = dbNote.updated_at ? formatDateTime(dbNote.updated_at) : createdAt;
     
     return {
       id: noteId,
@@ -1978,6 +2228,159 @@ const TodayView = () => {
     }, 10);
   };
 
+  // 打开笔记详细编辑弹窗
+  const openNoteModal = (note: Note) => {
+    setSelectedNote(note);
+    setModalNoteContent(note.content);
+    onNoteModalOpen();
+    
+    // 聚焦到弹窗文本框
+    setTimeout(() => {
+      if (modalTextareaRef.current) {
+        modalTextareaRef.current.focus();
+        // 将光标移到文本末尾
+        const len = modalTextareaRef.current.value.length;
+        modalTextareaRef.current.setSelectionRange(len, len);
+      }
+    }, 100);
+  };
+
+  // 保存弹窗中的笔记内容
+  const saveModalNote = async () => {
+    if (!selectedNote || !modalNoteContent.trim()) return;
+
+    try {
+      // 构建更新数据
+      const updateData = {
+        content: modalNoteContent.trim(),
+        updated_at: getCurrentDateTimeString()
+      };
+
+      // 调用数据库更新
+      const { error } = await supabase
+        .from('notes')
+        .update(updateData)
+        .eq('note_id', selectedNote.id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error updating note:', error);
+        return;
+      }
+
+      // 更新本地状态
+      setNotesState(prevNotes => 
+        prevNotes.map(note => 
+          note.id === selectedNote.id 
+            ? { ...note, content: modalNoteContent.trim(), updatedAt: updateData.updated_at }
+            : note
+        )
+      );
+
+      // 如果有搜索状态，也更新搜索结果
+      if (filteredNotes.length > 0) {
+        setFilteredNotes(prevFiltered => 
+          prevFiltered.map(note => 
+            note.id === selectedNote.id 
+              ? { ...note, content: modalNoteContent.trim(), updatedAt: updateData.updated_at }
+              : note
+          )
+        );
+      }
+
+      // 关闭弹窗
+      onNoteModalOpenChange();
+      setSelectedNote(null);
+      setModalNoteContent('');
+
+    } catch (error) {
+      console.error('Error saving modal note:', error);
+    }
+  };
+
+  // 从弹窗删除笔记
+  const deleteModalNote = async () => {
+    if (!selectedNote) return;
+
+    try {
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('note_id', selectedNote.id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error deleting note:', error);
+        return;
+      }
+
+      // 更新本地状态
+      setNotesState(prevNotes => prevNotes.filter(note => note.id !== selectedNote.id));
+      
+      // 如果有搜索状态，也更新搜索结果
+      if (filteredNotes.length > 0) {
+        setFilteredNotes(prevFiltered => prevFiltered.filter(note => note.id !== selectedNote.id));
+      }
+
+      // 关闭弹窗
+      onNoteModalOpenChange();
+      setSelectedNote(null);
+      setModalNoteContent('');
+
+    } catch (error) {
+      console.error('Error deleting modal note:', error);
+    }
+  };
+
+  // 从弹窗切换置顶状态
+  const toggleModalNotePin = async () => {
+    if (!selectedNote) return;
+
+    try {
+      const newPinnedState = !selectedNote.pinned;
+      
+      const { error } = await supabase
+        .from('notes')
+        .update({ 
+          pinned: newPinnedState,
+          updated_at: getCurrentDateTimeString()
+        })
+        .eq('note_id', selectedNote.id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error toggling note pin:', error);
+        return;
+      }
+
+      // 更新本地状态
+      const updatedNote = { ...selectedNote, pinned: newPinnedState };
+      setSelectedNote(updatedNote);
+      
+      setNotesState(prevNotes => 
+        prevNotes.map(note => 
+          note.id === selectedNote.id 
+            ? updatedNote
+            : note
+        )
+      );
+
+      // 如果有搜索状态，也更新搜索结果
+      if (filteredNotes.length > 0) {
+        setFilteredNotes(prevFiltered => 
+          prevFiltered.map(note => 
+            note.id === selectedNote.id 
+              ? updatedNote
+              : note
+          )
+        );
+      }
+
+    } catch (error) {
+      console.error('Error toggling modal note pin:', error);
+    }
+  };
+
   // 自动调整textarea高度的函数
   const adjustTextareaHeight = (textarea: HTMLTextAreaElement, targetLines?: number, minLines?: number) => {
     // 重置高度以获取正确的scrollHeight
@@ -2122,400 +2525,846 @@ const TodayView = () => {
       <div 
         className="flex flex-col gap-6 pb-40 hide-scrollbar"
       >
-        {/* 上方时间段和任务源区域 */}
-        <div className="flex gap-6 min-h-[400px]">
-          {/* 左侧三个时间段 */}
-          <div className="flex-1 flex flex-col gap-4 ml-4">
-            {(['morning','afternoon','evening'] as TimeSlot[]).map(slot => renderSlot(slot))}
+        {/* 上方时间段和任务源区域 - 清晰版本 */}
+        <div className={`flex mb-8 ${challengesCollapsed && templatesCollapsed ? 'gap-2' : 'gap-6'}`}>
+          {/* 左侧三个时间段 - Mission Control */}
+          <div className={`flex flex-col gap-6 ${challengesCollapsed && templatesCollapsed ? 'flex-1' : 'flex-1'}`}>
+            <div className="relative">
+              <Card className={`relative bg-content1 border border-primary/50 shadow-lg overflow-hidden ${challengesCollapsed && templatesCollapsed ? 'h-[512px]' : 'h-[512px]'}`}>
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-success"></div>
+
+                <CardBody className="p-0 h-full">
+                  <div className="grid grid-cols-1 gap-0 h-full">
+                    {(['morning','afternoon','evening'] as TimeSlot[]).map((slot, index) => {
+                      const slotConfig = TIME_SLOTS.find(s => s.id === slot);
+                      const slotColors = {
+                        morning: { bg: 'bg-warning/15', border: 'border-warning/50', accent: 'bg-warning' },
+                        afternoon: { bg: 'bg-primary/15', border: 'border-primary/50', accent: 'bg-primary' },
+                        evening: { bg: 'bg-secondary/15', border: 'border-secondary/50', accent: 'bg-secondary' }
+                      };
+                      const colorScheme = slotColors[slot];
+                      
+                      return (
+                        <div 
+                          key={slot} 
+                          className={`relative flex-1 ${index !== 2 ? 'border-b border-divider' : ''}`}
+                          onMouseEnter={() => setHoveredSlot(slot)}
+                          onMouseLeave={() => setHoveredSlot(null)}
+                        >
+                          <div className="relative flex items-stretch h-full min-h-[140px]">
+                            {/* 时间段标识 */}
+                            <div className={`w-24 flex flex-col items-center justify-center ${colorScheme.bg} ${colorScheme.border} border-r`}>
+                              <div className={`w-4 h-4 rounded-full mb-2 ${colorScheme.accent}`}></div>
+                              <span className="font-mono text-sm font-bold tracking-widest text-center text-foreground">
+                                {slotConfig?.name}
+                              </span>
+                              <div className="text-xs text-default-600 font-mono mt-1 font-bold">
+                                {slot === 'morning' ? '06:00' : slot === 'afternoon' ? '13:00' : '19:00'}
+                              </div>
+                            </div>
+                            
+                            {/* 任务区域 */}
+                            <div className="flex-1 p-4 bg-content1">
+                              <Droppable droppableId={slot} direction="vertical">
+                                {(provided: any, snapshot: any) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.droppableProps}
+                                    className={`space-y-2 min-h-[100px] ${
+                                      snapshot.isDraggingOver ? 'bg-primary/20 border-2 border-dashed border-primary rounded-lg p-3' : ''
+                                    }`}
+                                  >
+                                    {scheduledTasks.filter(task => task.timeSlot === slot).map((task, taskIndex) => (
+                                      <Draggable key={`task-${task.id}-${slot}`} draggableId={`task-${task.id}-${slot}`} index={taskIndex}>
+                                        {(provided: any, snapshot: any) => (
+                                          <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            {...provided.dragHandleProps}
+                                            className={`group relative p-3 rounded-lg border transition-all duration-200 cursor-grab ${
+                                              snapshot.isDragging 
+                                                ? 'bg-primary/30 border-primary shadow-xl scale-105 z-50' 
+                                                : 'bg-content2 border-divider hover:border-primary hover:bg-content2/70'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <div className={`w-3 h-3 rounded-full ${task.completed ? 'bg-success' : 'bg-default-400'}`}></div>
+                                              
+                                              {editingTaskId === task.id ? (
+                                                <Input
+                                                  ref={editInputRef}
+                                                  size="sm"
+                                                  variant="underlined"
+                                                  value={editingText}
+                                                  onChange={(e) => setEditingText(e.target.value)}
+                                                  onKeyDown={handleEditKeyDown}
+                                                  onBlur={saveEditedTask}
+                                                  className="flex-1"
+                                                  classNames={{
+                                                    input: "text-sm font-mono text-foreground",
+                                                    inputWrapper: "bg-transparent"
+                                                  }}
+                                                />
+                                              ) : (
+                                                <span 
+                                                  className={`flex-1 text-sm font-mono cursor-pointer font-bold ${
+                                                    task.completed ? 'line-through text-default-500' : 'text-foreground hover:text-primary'
+                                                  }`}
+                                                  onClick={(e) => {e.stopPropagation(); startEditing(task.id, task.title);}}
+                                                >
+                                                  {task.title}
+                                                </span>
+                                              )}
+                                              
+                                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button
+                                                  isIconOnly
+                                                  size="sm"
+                                                  variant="flat"
+                                                  color={task.completed ? "success" : "default"}
+                                                  onClick={(e) => {e.stopPropagation(); toggleComplete(task.id);}}
+                                                  className="w-6 h-6 min-w-0"
+                                                >
+                                                  ✓
+                                                </Button>
+                                                <Button
+                                                  isIconOnly
+                                                  size="sm"
+                                                  variant="flat"
+                                                  color="danger"
+                                                  onClick={(e) => {e.stopPropagation(); handleDeleteTask(task.id);}}
+                                                  className="w-6 h-6 min-w-0"
+                                                >
+                                                  ✕
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </Draggable>
+                                    ))}
+                                    {provided.placeholder}
+                                    
+                                    {/* 添加新任务区域 */}
+                                    {hoveredSlot === slot && (
+                                      <div className="mt-3 p-3 bg-content2 border border-dashed border-primary rounded-lg">
+                                        <div className="flex gap-2">
+                                          <Input
+                                            size="sm"
+                                            placeholder="新任务..."
+                                            value={newTaskText[slot] || ''}
+                                            onChange={(e) => setNewTaskText({ ...newTaskText, [slot]: e.target.value })}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleCreateTask(slot)}
+                                            variant="bordered"
+                                            classNames={{
+                                              input: "font-mono text-sm text-foreground",
+                                              inputWrapper: "bg-content1"
+                                            }}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            color="primary"
+                                            onClick={() => handleCreateTask(slot)}
+                                            className="font-mono font-bold"
+                                          >
+                                            添加
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </Droppable>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardBody>
+              </Card>
+            </div>
           </div>
           
-          {/* 右侧任务列表（上下排列） */}
-          <div className="flex flex-col gap-4 transition-all duration-300">
-            {/* 支线任务列表 */}
-            <div className={`valhalla-panel overflow-hidden flex h-[400px] ${challengesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
-              <div className={`flex items-center justify-center ${challengesCollapsed ? 'w-full' : 'hidden'}`}>
-                <button 
-                  className="p-1 hover:bg-sidebar-item-hover-bg rounded"
-                  onClick={toggleChallengesCollapse}
-                  title="展开支线任务"
-                >
-                  <span className="font-display text-accent-gold text-lg -rotate-90 whitespace-nowrap transform origin-center flex items-center">
-                    支线任务
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                    </svg>
-                  </span>
-                </button>
-              </div>
-              <div className={`flex-1 ${challengesCollapsed ? 'hidden' : 'flex flex-col'}`}>
-                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2 flex-shrink-0">
-                  <h3 className="font-display text-lg text-accent-gold">
-                    支线任务
-                  </h3>
-                  <button 
-                    className="p-1 hover:bg-sidebar-item-hover-bg rounded"
+          {/* 右侧任务源面板 - 清晰版本 */}
+          <div className={`flex flex-col gap-6 transition-all duration-300 ${
+            challengesCollapsed && templatesCollapsed 
+              ? 'w-20' 
+              : challengesCollapsed || templatesCollapsed 
+                ? 'w-64' 
+                : 'w-80'
+          }`}>
+            {/* 支线任务 */}
+            <Card className={`relative bg-danger/15 border border-danger/60 shadow-lg transition-all duration-300 ${challengesCollapsed ? 'w-16 ml-auto' : 'w-full'}`}>
+              <div className="absolute top-0 left-0 w-full h-1 bg-danger"></div>
+              {challengesCollapsed ? (
+                <CardBody className="py-6 px-2 flex items-center justify-center h-full min-h-[200px]">
+                  <Button
+                    variant="light"
                     onClick={toggleChallengesCollapse}
-                    title="收起支线任务"
+                    className="h-full w-full writing-mode-vertical-rl"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                    </svg>
-                  </button>
-                </div>
-                <Droppable droppableId="challenges" isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
-                  {(provided: any, snapshot: any) => (
-                    <div 
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className="space-y-2 p-1 flex-1 overflow-y-auto hide-scrollbar"
-                    >
-                      {loadingTasks ? (
-                        <div className="text-center py-4">
-                          <p className="text-accent-gold">加载任务中...</p>
-                        </div>
-                      ) : challengeTasks.length === 0 ? (
-                        <div className="text-center py-4">
-                          <p className="text-text-secondary">暂无支线任务</p>
-                        </div>
-                      ) : (
-                        challengeTasks.filter(task => task && task.id).map((task, index) => (
-                          <Draggable key={getSafeDraggableId('challenge', task.id)} draggableId={getSafeDraggableId('challenge', task.id)} index={index}>
-                            {(provided: any, snapshot: any) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center drag-item`}
-                                style={{
-                                  ...provided.draggableProps.style,
-                                  zIndex: snapshot.isDragging ? 9999 : 50
-                                }}
-                              >
-                                <div className="flex-1 font-semibold">{task.title}</div>
-                                <div 
-                                  className="ml-2 opacity-50 group-hover:opacity-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTaskClick('挑战', task.id);
-                                  }}
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                                  </svg>
-                                </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))
-                      )}
-                      {provided.placeholder}
+                    <div className="flex flex-col items-center gap-3 h-full justify-center">
+                      <div className="w-2 h-2 bg-danger rounded-full"></div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-mono text-danger font-bold">C</span>
+                        <span className="text-sm font-mono text-danger font-bold">H</span>
+                        <span className="text-sm font-mono text-danger font-bold">A</span>
+                        <span className="text-sm font-mono text-danger font-bold">L</span>
+                        <span className="text-sm font-mono text-danger font-bold">L</span>
+                        <span className="text-sm font-mono text-danger font-bold">E</span>
+                        <span className="text-sm font-mono text-danger font-bold">N</span>
+                        <span className="text-sm font-mono text-danger font-bold">G</span>
+                        <span className="text-sm font-mono text-danger font-bold">E</span>
+                        <span className="text-sm font-mono text-danger font-bold">S</span>
+                      </div>
+                      <div className="w-2 h-2 bg-danger rounded-full"></div>
                     </div>
-                  )}
-                </Droppable>
-              </div>
-            </div>
+                  </Button>
+                </CardBody>
+              ) : (
+                <>
+                  <CardHeader className="border-b border-danger/30 bg-danger/10">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 bg-danger rounded-full"></div>
+                        <h3 className="font-mono font-bold text-danger tracking-wider">CHALLENGES</h3>
+                      </div>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="flat"
+                        onClick={toggleChallengesCollapse}
+                        className="text-danger"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                        </svg>
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <ScrollShadow className="h-48">
+                    <CardBody className="p-4 space-y-3 bg-content1">
+                      <Droppable droppableId="challenges">
+                        {(provided: any, snapshot: any) => (
+                          <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+                            {challengeTasks.map((task, index) => (
+                              <Draggable key={getSafeDraggableId('challenge', task.id)} draggableId={getSafeDraggableId('challenge', task.id)} index={index}>
+                                {(provided: any, snapshot: any) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className={`p-3 rounded-lg border transition-all cursor-grab ${
+                                      snapshot.isDragging 
+                                        ? 'bg-danger/30 border-danger shadow-xl scale-105' 
+                                        : 'bg-danger/20 border-danger hover:border-danger/80 hover:bg-danger/25'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 bg-danger rounded-full"></div>
+                                      <span className="text-sm font-mono text-foreground flex-1 font-bold">{task.title}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </CardBody>
+                  </ScrollShadow>
+                </>
+              )}
+            </Card>
             
-            {/* 日常任务模板 */}
-            <div className={`valhalla-panel overflow-hidden flex h-[400px] ${templatesCollapsed ? 'w-12 ml-auto' : 'w-80'} transition-all duration-300`}>
-              <div className={`flex items-center justify-center ${templatesCollapsed ? 'w-full' : 'hidden'}`}>
-                <button 
-                  className="p-1 hover:bg-sidebar-item-hover-bg rounded"
-                  onClick={toggleTemplatesCollapse}
-                  title="展开日常任务"
-                >
-                  <span className="font-display text-accent-gold text-lg -rotate-90 whitespace-nowrap transform origin-center flex items-center">
-                    日常任务
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                    </svg>
-                  </span>
-                </button>
-              </div>
-              <div className={`flex-1 ${templatesCollapsed ? 'hidden' : 'flex flex-col'}`}>
-                <div className="flex justify-between items-center border-b border-border-metal mb-4 pb-2 flex-shrink-0">
-                  <h3 className="font-display text-lg text-accent-gold">
-                    日常任务
-                  </h3>
-                  <button 
-                    className="p-1 hover:bg-sidebar-item-hover-bg rounded"
+            {/* 日常任务 */}
+            <Card className={`relative bg-success/15 border border-success/60 shadow-lg transition-all duration-300 ${templatesCollapsed ? 'w-16 ml-auto' : 'w-full'}`}>
+              <div className="absolute top-0 left-0 w-full h-1 bg-success"></div>
+              {templatesCollapsed ? (
+                <CardBody className="py-6 px-2 flex items-center justify-center h-full min-h-[200px]">
+                  <Button
+                    variant="light"
                     onClick={toggleTemplatesCollapse}
-                    title="收起日常任务"
+                    className="h-full w-full writing-mode-vertical-rl"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                    </svg>
-                  </button>
-                </div>
-                <Droppable droppableId="templates" isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
-                  {(provided: any, snapshot: any) => (
-                    <div 
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className="space-y-2 p-1 flex-1 overflow-y-auto hide-scrollbar"
-                    >
-                      {loadingTemplates ? (
-                        <div className="text-center py-4">
-                          <p className="text-accent-gold">加载任务模板中...</p>
-                        </div>
-                      ) : templateTasks.length === 0 ? (
-                        <div className="text-center py-4">
-                          <p className="text-text-secondary">暂无日常任务模板</p>
-                        </div>
-                      ) : (
-                        templateTasks.filter(task => task && task.id).map((task, index) => (
-                          <Draggable key={getSafeDraggableId('template', task.id)} draggableId={getSafeDraggableId('template', task.id)} index={index}>
-                            {(provided: any, snapshot: any) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`p-2 border border-border-metal rounded-md ${snapshot.isDragging ? 'bg-accent-gold/20 shadow-lg scale-105' : 'bg-bg-panel'} cursor-grab relative transition-transform hover:border-accent-gold z-50 flex items-center drag-item`}
-                                style={{
-                                  ...provided.draggableProps.style,
-                                  zIndex: snapshot.isDragging ? 9999 : 50
-                                }}
-                              >
-                                <div className="flex-1 font-semibold">{task.title}</div>
-                                <div 
-                                  className="ml-2 opacity-50 group-hover:opacity-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTaskClick('模板', task.id);
-                                  }}
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                                  </svg>
-                                </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))
-                      )}
-                      {provided.placeholder}
+                    <div className="flex flex-col items-center gap-3 h-full justify-center">
+                      <div className="w-2 h-2 bg-success rounded-full"></div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-mono text-success font-bold">K</span>
+                        <span className="text-sm font-mono text-success font-bold">E</span>
+                        <span className="text-sm font-mono text-success font-bold">E</span>
+                        <span className="text-sm font-mono text-success font-bold">P</span>
+                        <span className="text-sm font-mono text-success font-bold">•</span>
+                        <span className="text-sm font-mono text-success font-bold">O</span>
+                        <span className="text-sm font-mono text-success font-bold">N</span>
+                      </div>
+                      <div className="w-2 h-2 bg-success rounded-full"></div>
                     </div>
-                  )}
-                </Droppable>
-              </div>
-            </div>
+                  </Button>
+                </CardBody>
+              ) : (
+                <>
+                  <CardHeader className="border-b border-success/30 bg-success/10">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 bg-success rounded-full"></div>
+                        <h3 className="font-mono font-bold text-success tracking-wider">KEEP ON</h3>
+                      </div>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="flat"
+                        onClick={toggleTemplatesCollapse}
+                        className="text-success"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                        </svg>
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <ScrollShadow className="h-48">
+                    <CardBody className="p-4 space-y-3 bg-content1">
+                      <Droppable droppableId="templates">
+                        {(provided: any, snapshot: any) => (
+                          <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+                            {templateTasks.map((task, index) => (
+                              <Draggable key={getSafeDraggableId('template', task.id)} draggableId={getSafeDraggableId('template', task.id)} index={index}>
+                                {(provided: any, snapshot: any) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className={`p-3 rounded-lg border transition-all cursor-grab ${
+                                      snapshot.isDragging 
+                                        ? 'bg-success/30 border-success shadow-xl scale-105' 
+                                        : 'bg-success/20 border-success hover:border-success/80 hover:bg-success/25'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 bg-success rounded-full"></div>
+                                      <span className="text-sm font-mono text-foreground flex-1 font-bold">{task.title}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </CardBody>
+                  </ScrollShadow>
+                </>
+              )}
+            </Card>
           </div>
         </div>
         
-        {/* 标签选择器 */}
-        <div className="flex justify-between items-center border-b border-border-metal mt-2">
-          <div className="flex">
-            <button
-              className={`px-6 py-3 font-display text-lg ${activeTab === 'history' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
-              onClick={() => setActiveTab('history')}
+        {/* 标签选择器 - Capsule Style */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="bg-content2 p-1 rounded-full border border-divider shadow-sm">
+            <Tabs
+              selectedKey={activeTab}
+              onSelectionChange={(key) => setActiveTab(key as 'history' | 'notes')}
+              variant="solid"
+              classNames={{
+                base: "w-auto",
+                tabList: "gap-1 bg-transparent border-0 rounded-full p-0",
+                cursor: "bg-primary shadow-md rounded-full",
+                tab: "px-6 py-2 h-10 rounded-full",
+                tabContent: "text-default-600 data-[selected=true]:text-white font-mono text-sm font-bold tracking-wider relative z-10"
+              }}
+              color="primary"
             >
-              历史记录
-            </button>
-            <button
-              className={`px-6 py-3 font-display text-lg ${activeTab === 'notes' ? 'bg-accent-gold text-text-on-accent' : 'text-text-primary hover:bg-sidebar-item-hover-bg'}`}
-              onClick={() => setActiveTab('notes')}
-            >
-              笔记
-            </button>
+              <Tab key="history" title="HISTORY" />
+              <Tab key="notes" title="NOTES" />
+            </Tabs>
           </div>
           
-          {/* 搜索框 - 只在笔记标签页显示 */}
+          {/* 搜索框 - 独立右侧 */}
           {activeTab === 'notes' && (
-            <div className="flex-shrink-0 w-80 mr-4">
-              <div className="border border-border-metal rounded-md overflow-hidden transition-all duration-200 focus-within:border-accent-gold hover:border-accent-gold/50 bg-bg-panel">
-                <div className="relative">
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2 bg-transparent text-text-primary placeholder-text-secondary text-sm"
-                    placeholder="搜索笔记内容..."
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                  />
-                  {/* 搜索图标或清除按钮 */}
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    {searchQuery ? (
-                      <button
-                        onClick={clearSearch}
-                        className="p-1 text-text-secondary hover:text-accent-gold transition-colors"
-                        title="清除搜索"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <div className="flex-shrink-0">
+              <Input
+                placeholder="搜索笔记..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e)}
+                variant="flat"
+                size="sm"
+                classNames={{
+                  base: "w-64",
+                  mainWrapper: "h-10",
+                  input: "text-sm",
+                  inputWrapper: "bg-default-100 hover:bg-default-200 group-data-[focus=true]:bg-background border border-default-200 group-data-[focus=true]:border-primary transition-colors duration-200"
+                }}
+                startContent={
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-default-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                }
+                endContent={
+                  searchQuery ? (
+                    <Button
+                      isIconOnly
+                      variant="light"
+                      size="sm"
+                      onClick={clearSearch}
+                      className="min-w-unit-4 w-4 h-4 text-default-400 hover:text-danger"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </Button>
+                  ) : null
+                }
+              />
             </div>
           )}
         </div>
-        
-        {/* 标签页内容 - 不再有外框限制 */}
+
+        {/* 标签页内容 */}
         {activeTab === 'history' ? (
-          <div className="valhalla-panel overflow-hidden flex flex-col">
-            {renderHistoryTab()}
+          <div className="relative">
+            <Card className="relative bg-content1 border border-primary/30 shadow-lg">
+              <CardHeader className="border-b border-divider bg-content2">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-3 h-3 bg-danger rounded-full animate-pulse"></div>
+                    <div className="w-3 h-3 bg-warning rounded-full animate-pulse delay-75"></div>
+                    <div className="w-3 h-3 bg-success rounded-full animate-pulse delay-150"></div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardBody>
+                {renderHistoryTab()}
+              </CardBody>
+            </Card>
           </div>
         ) : (
-          <div className="flex flex-col">
-            {/* 新建笔记区域 - 优化后的单一边框设计 */}
-            <div className={`mb-4 flex-shrink-0 border border-border-metal rounded-md overflow-hidden transition-all duration-200 focus-within:border-accent-gold hover:border-accent-gold/50 textarea-container note-input-container ${newNoteFocused ? 'focused' : ''}`}>
-              <div className="relative bg-bg-panel">
-                <textarea
-                  ref={newNoteTextareaRef}
-                  className={`w-full p-4 pr-12 optimized-textarea auto-resize-textarea text-text-primary placeholder-text-secondary leading-relaxed ${newNoteFocused ? 'focused' : ''}`}
-                  style={{ minHeight: '40px', maxHeight: '200px' }}
-                  placeholder="记录你的想法和灵感..."
-                  value={newNote}
-                  onChange={handleNewNoteChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.metaKey) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      createNewNote();
+          <div className="space-y-6">
+            {/* 新建笔记区域 - 清晰版本 */}
+            <div className="relative group">
+              <Card className="relative bg-content1 border border-primary/40 shadow-lg overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary"></div>
+                <CardHeader className="border-b border-divider bg-content2/50">
+                  <div className="flex items-center gap-3 w-full">
+                    <div className="flex gap-1">
+                      <div className="w-3 h-3 bg-success rounded-full animate-pulse"></div>
+                      <div className="w-3 h-3 bg-warning rounded-full animate-pulse delay-75"></div>
+                      <div className="w-3 h-3 bg-danger rounded-full animate-pulse delay-150"></div>
+                    </div>
+                    <div className="flex-1 text-center">
+                      <span className="text-primary font-mono text-sm tracking-widest font-bold">TERMINAL</span>
+                    </div>
+
+                  </div>
+                </CardHeader>
+                <CardBody className="p-6 bg-content1">
+                  <Textarea
+                    ref={newNoteTextareaRef}
+                    placeholder="> 输入数据记录..."
+                    value={newNote}
+                    onValueChange={(value) => setNewNote(value)}
+                    variant="bordered"
+                    minRows={3}
+                    maxRows={8}
+                    classNames={{
+                      base: "w-full",
+                      input: "text-foreground leading-relaxed font-mono",
+                      inputWrapper: "bg-content2 border-primary/30 data-[focus=true]:border-primary",
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.metaKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        createNewNote();
+                      }
+                    }}
+                    onFocus={handleNewNoteFocus}
+                    onBlur={handleNewNoteBlur}
+                    endContent={
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-default-500 font-mono font-bold">
+                          {newNote.length} chars
+                        </div>
+                        <Button
+                          isIconOnly
+                          variant="flat"
+                          size="sm"
+                          className={`${
+                            newNote.trim() 
+                              ? 'text-white bg-primary hover:bg-primary/80' 
+                              : 'text-default-400 cursor-not-allowed bg-default-100'
+                          } border border-primary/50`}
+                          onClick={createNewNote}
+                          isDisabled={!newNote.trim()}
+                          title={newNote.trim() ? "上传数据 (Cmd + Enter)" : "输入内容后可上传"}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                        </Button>
+                      </div>
                     }
-                  }}
-                  onFocus={handleNewNoteFocus}
-                  onBlur={handleNewNoteBlur}
-                />
-                {/* 发送按钮 - 位置优化 */}
-                <button 
-                  className={`absolute bottom-3 right-3 p-1 rounded-md send-button transition-all duration-200 ${
-                    newNote.trim() 
-                      ? 'text-accent-gold hover:text-accent-gold/80 hover:bg-accent-gold/10 scale-100 opacity-100' 
-                      : 'text-text-secondary/30 scale-90 opacity-50 cursor-not-allowed'
-                  }`}
-                  onClick={createNewNote}
-                  disabled={!newNote.trim()}
-                  title={newNote.trim() ? "保存笔记 (Cmd + Enter)" : "输入内容后可保存"}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                </button>
-              </div>
+                  />
+                </CardBody>
+              </Card>
             </div>
             
-            {/* 笔记列表 - 直接在主滚动区域内，没有外框限制 */}
-            <div className="space-y-3" ref={noteContainerRef}>
-              {/* 确保遍历前笔记状态有效 */}
-              {Array.isArray(getDisplayNotes()) && getDisplayNotes().map((note) => {
+            {/* 笔记显示区域 - 高对比度版本 */}
+            <div className="space-y-6">
+              {(() => {
+                const displayNotes = getDisplayNotes();
+                const pinnedNotes = displayNotes.filter(note => note.pinned);
+                const regularNotes = displayNotes.filter(note => !note.pinned);
+
                 return (
-                  <div
-                    key={note.id}
-                    className="valhalla-panel p-3 cursor-pointer hover:border-accent-gold/50"
-                    onDoubleClick={() => startEditingNote(note)}
-                  >
-                    {editingNoteId === note.id ? (
-                      <div className="flex flex-col relative">
-                        {/* 编辑模式的textarea也使用相同的优化设计 */}
-                        <div className="border border-border-metal rounded-md overflow-hidden focus-within:border-accent-gold textarea-container">
-                          <textarea
-                            ref={noteTextareaRef}
-                            className="w-full p-3 optimized-textarea auto-resize-textarea bg-bg-dark text-text-primary leading-relaxed"
-                            style={{ minHeight: '80px', maxHeight: '300px' }}
-                            value={editingNoteContent}
-                            onChange={handleEditNoteChange}
-                            onKeyDown={handleNoteKeyDown}
-                          />
-                        </div>
-                        <div className="flex justify-end mt-3 gap-2">
-                          <button 
-                            className="px-3 py-1.5 bg-text-secondary/20 text-text-secondary rounded-md text-sm hover:bg-text-secondary/30 transition-colors"
-                            onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
-                          >
-                            取消
-                          </button>
-                          <button 
-                            className="px-3 py-1.5 bg-accent-gold text-text-on-accent rounded-md text-sm hover:bg-accent-gold/90 transition-colors"
-                            onClick={saveEditedNote}
-                          >
-                            保存
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="whitespace-pre-wrap flex-1 leading-relaxed">{note.content}</div>
-                          {note.pinned && (
-                            <div className="ml-2 flex-shrink-0">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-accent-gold" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M16 12V4a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v8H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-5h2a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-2z"/>
-                              </svg>
+                  <>
+                    {/* 置顶笔记 - 全宽显示，高对比度 */}
+                    {pinnedNotes.map((note) => (
+                      <div key={`pinned-${note.id}`} className="relative group">
+                        <Card className="relative bg-warning/20 border-2 border-warning shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+                          <div className="absolute top-0 left-0 w-full h-1 bg-warning"></div>
+                          <CardHeader className="border-b border-warning/30 bg-warning/10">
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-3">
+                                <div className="relative">
+                                  <div className="w-4 h-4 bg-warning rounded-full"></div>
+                                </div>
+                                <Chip
+                                  color="warning"
+                                  variant="solid"
+                                  size="sm"
+                                  className="font-mono text-xs tracking-wider font-bold"
+                                  startContent={
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M16 12V4a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v8H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-5h2a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-2z"/>
+                                    </svg>
+                                  }
+                                >
+                                  PIN
+                                </Chip>
+                              </div>
+                              <div className="text-xs text-foreground font-mono tracking-wider font-bold">
+                                {formatNoteTime(note.updatedAt)}
+                              </div>
                             </div>
+                          </CardHeader>
+                          {editingNoteId === note.id ? (
+                            <CardBody className="p-6 bg-content1">
+                              <Textarea
+                                ref={noteTextareaRef}
+                                value={editingNoteContent}
+                                onValueChange={setEditingNoteContent}
+                                variant="bordered"
+                                minRows={4}
+                                maxRows={15}
+                                classNames={{
+                                  base: "w-full",
+                                  input: "text-foreground leading-relaxed font-mono",
+                                  inputWrapper: "bg-content1 border-warning/30",
+                                }}
+                                onKeyDown={handleNoteKeyDown}
+                              />
+                              <div className="flex justify-end mt-4 gap-3">
+                                <Button 
+                                  variant="bordered"
+                                  size="sm"
+                                  className="border-default-300"
+                                  onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
+                                >
+                                  取消
+                                </Button>
+                                <Button 
+                                  color="warning"
+                                  size="sm"
+                                  variant="solid"
+                                  className="shadow-lg font-bold"
+                                  onClick={saveEditedNote}
+                                >
+                                  保存数据
+                                </Button>
+                              </div>
+                            </CardBody>
+                          ) : (
+                            <CardBody 
+                              className="p-6 cursor-pointer hover:bg-warning/10 transition-colors bg-content1"
+                              onClick={() => openNoteModal(note)}
+                            >
+                              <div className="whitespace-pre-wrap leading-relaxed text-foreground font-mono text-sm">
+                                {note.content}
+                              </div>
+                              <Divider className="my-4 bg-warning/50" />
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="flat"
+                                  size="sm"
+                                  color="warning"
+                                  onClick={(e) => { e.stopPropagation(); toggleNotePinHandler(note.id, note.pinned || false); }}
+                                  className="min-w-0 px-3 h-6 text-xs font-mono font-bold"
+                                >
+                                  取消置顶
+                                </Button>
+                                <Button 
+                                  variant="flat"
+                                  size="sm"
+                                  color="primary"
+                                  onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
+                                  className="min-w-0 px-3 h-6 text-xs font-mono font-bold"
+                                >
+                                  编辑
+                                </Button>
+                                <Button 
+                                  variant="flat"
+                                  size="sm"
+                                  color="danger"
+                                  onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
+                                  className="min-w-0 px-3 h-6 text-xs font-mono font-bold"
+                                >
+                                  删除
+                                </Button>
+                              </div>
+                            </CardBody>
                           )}
-                        </div>
-                        <div className="flex justify-between items-center text-xs opacity-70 mt-2 pt-2 border-t border-border-metal">
-                          <span>
-                            {formatDateTime(note.updatedAt)}
-                          </span>
-                          <div>
-                            <button 
-                              className={`mr-2 ${note.pinned ? 'text-accent-gold hover:text-accent-gold/80' : 'text-gray-400 hover:text-accent-gold'}`}
-                              onClick={(e) => { e.stopPropagation(); toggleNotePinHandler(note.id, note.pinned || false); }}
-                              title={note.pinned ? '取消置顶' : '置顶笔记'}
-                            >
-                              {note.pinned ? '取消置顶' : '置顶'}
-                            </button>
-                            <button 
-                              className="text-accent-gold hover:text-accent-gold/80 mr-2"
-                              onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
-                            >
-                              编辑
-                            </button>
-                            <button 
-                              className="text-red-500 hover:text-red-400"
-                              onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
-                            >
-                              删除
-                            </button>
-                          </div>
-                        </div>
-                      </>
+                        </Card>
+                      </div>
+                    ))}
+
+                    {/* 普通笔记 - 网格布局，高对比度 */}
+                    {regularNotes.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {regularNotes.map((note, index) => {
+                          return (
+                            <div key={`regular-${note.id}`} className="relative group">
+                              <Card className="relative h-48 bg-content1 border border-default-200 hover:border-primary shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer sticky-note z-10 hover:z-20">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-default-300 group-hover:bg-primary transition-colors duration-300"></div>
+                                {editingNoteId === note.id ? (
+                                  <CardBody className="p-4 flex flex-col h-full bg-content1">
+                                    <Textarea
+                                      ref={noteTextareaRef}
+                                      value={editingNoteContent}
+                                      onValueChange={setEditingNoteContent}
+                                      variant="bordered"
+                                      minRows={3}
+                                      maxRows={6}
+                                      classNames={{
+                                        base: "flex-1",
+                                        input: "text-foreground leading-relaxed text-sm",
+                                        inputWrapper: "bg-content1 border-default-200",
+                                      }}
+                                      onKeyDown={handleNoteKeyDown}
+                                    />
+                                    <div className="flex justify-end mt-2 gap-1">
+                                      <Button 
+                                        isIconOnly
+                                        variant="flat"
+                                        size="sm"
+                                        className="w-6 h-6 min-w-0"
+                                        onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
+                                      >
+                                        ✕
+                                      </Button>
+                                      <Button 
+                                        isIconOnly
+                                        color="primary"
+                                        variant="solid"
+                                        size="sm"
+                                        className="w-6 h-6 min-w-0"
+                                        onClick={saveEditedNote}
+                                      >
+                                        ✓
+                                      </Button>
+                                    </div>
+                                  </CardBody>
+                                ) : (
+                                  <CardBody 
+                                    className="p-4 flex flex-col h-full justify-between bg-content1"
+                                    onClick={() => openNoteModal(note)}
+                                  >
+                                    <div className="whitespace-pre-wrap leading-relaxed text-foreground text-sm flex-1 overflow-hidden font-mono">
+                                      {note.content.length > 100 ? note.content.substring(0, 100) + '...' : note.content}
+                                    </div>
+                                    <div className="mt-3 pt-2 border-t border-divider">
+                                      <div className="flex justify-between items-center">
+                                        <div className="text-xs text-default-600 font-mono font-bold">
+                                          {formatNoteTime(note.updatedAt)}
+                                        </div>
+                                        <div className="flex gap-1">
+                                          <Button 
+                                            isIconOnly
+                                            variant="flat"
+                                            size="sm"
+                                            className="w-5 h-5 min-w-0 opacity-70 hover:opacity-100"
+                                            onClick={(e) => { e.stopPropagation(); toggleNotePinHandler(note.id, note.pinned || false); }}
+                                          >
+                                            📌
+                                          </Button>
+                                          <Button 
+                                            isIconOnly
+                                            variant="flat"
+                                            size="sm"
+                                            className="w-5 h-5 min-w-0 opacity-70 hover:opacity-100"
+                                            onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
+                                          >
+                                            🗑
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </CardBody>
+                                )}
+                              </Card>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                  </div>
+                  </>
                 );
-              })}
-              
+              })()}
+
+              {/* 加载和空状态 - 清晰版本 */}
               {notesLoading && (
-                <div className="text-center py-4 bg-bg-panel rounded-md border border-border-metal">
-                  <p className="text-accent-gold">加载更多笔记中...</p>
-                </div>
+                <Card className="relative text-center py-8 bg-content1 border border-primary/30">
+                  <CardBody>
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce"></div>
+                      <div className="w-3 h-3 bg-secondary rounded-full animate-bounce delay-100"></div>
+                      <div className="w-3 h-3 bg-success rounded-full animate-bounce delay-200"></div>
+                      <p className="text-primary font-mono tracking-wider ml-3 font-bold">LOADING_DATA...</p>
+                    </div>
+                  </CardBody>
+                </Card>
               )}
               
               {!notesLoading && getDisplayNotes().length === 0 && (
-                <div className="text-center py-8 bg-bg-panel rounded-md border border-border-metal">
-                  {isSearching ? (
-                    <>
-                      <p className="text-text-secondary text-lg">未找到匹配的笔记</p>
-                      <p className="text-text-secondary text-sm mt-2">尝试调整搜索关键词</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-text-secondary text-lg">暂无笔记</p>
-                      <p className="text-text-secondary text-sm mt-2">点击上方输入框输入并创建新笔记</p>
-                    </>
-                  )}
-                </div>
+                <Card className="relative text-center py-12 bg-content1 border border-default/50">
+                  <CardBody>
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 border-2 border-dashed border-default/50 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-default/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      {isSearching ? (
+                        <>
+                          <p className="text-default-600 text-lg font-mono font-bold">NO_DATA_FOUND</p>
+                          <p className="text-default-500 text-sm font-mono tracking-wider">检索条件无匹配项</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-default-600 text-lg font-mono font-bold">DATABASE_EMPTY</p>
+                          <p className="text-default-500 text-sm font-mono tracking-wider">使用上方终端创建数据记录</p>
+                        </>
+                      )}
+                    </div>
+                  </CardBody>
+                </Card>
               )}
               
-              {/* 触发加载更多的元素 */}
+              {/* 加载更多按钮 - 清晰版本 */}
               {hasMoreNotes && !isSearching && (
-                <div 
-                  className="py-2 text-center cursor-pointer hover:bg-bg-panel hover:text-accent-gold rounded-md border border-border-metal"
-                  onClick={handleLoadMoreClick}
+                <Card 
+                  isPressable
+                  onPress={handleLoadMoreClick}
+                  className="relative text-center cursor-pointer hover:scale-105 transition-all duration-300 bg-success/10 border border-success/50 hover:border-success"
                 >
-                  点击加载更多笔记
-                </div>
+                  <CardBody className="py-4">
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-2 h-2 bg-success rounded-full animate-ping"></div>
+                      <p className="text-success font-mono tracking-widest font-bold">LOAD_MORE_DATA</p>
+                      <div className="w-2 h-2 bg-success rounded-full animate-ping delay-300"></div>
+                    </div>
+                  </CardBody>
+                </Card>
               )}
             </div>
           </div>
         )}
       </div>
+
+            {/* 笔记详细编辑弹窗 */}
+      <Modal 
+        isOpen={isNoteModalOpen} 
+        onOpenChange={onNoteModalOpenChange}
+        scrollBehavior="inside"
+        size="2xl"
+        classNames={{
+          base: "shadow-lg rounded-lg overflow-hidden",
+          header: "border-b bg-[#3f3f46] border-[#f5a524] rounded-t-lg",
+          body: "py-6 bg-[#3f3f46]",
+          footer: "border-t bg-[#3f3f46] border-[#f5a524] rounded-b-lg"
+        }}
+        style={{
+          backgroundColor: '#3f3f46',
+          border: '1px solid #f5a524',
+          borderRadius: '8px'
+        }}
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="w-3 h-3 bg-[#f5a524] rounded-full"></div>
+                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  </div>
+                  <h2 className="text-[#f5a524] font-mono text-sm tracking-widest font-bold">
+                    编辑笔记
+                  </h2>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {selectedNote?.pinned && (
+                    <Chip
+                      style={{ backgroundColor: '#f5a524', color: '#000' }}
+                      variant="solid"
+                      size="sm"
+                      className="font-mono text-xs tracking-wider font-bold"
+                    >
+                      置顶
+                    </Chip>
+                  )}
+                  <div className="text-xs text-white font-mono tracking-wider font-bold">
+                    {selectedNote && formatNoteTime(selectedNote.updatedAt)}
+                  </div>
+                </div>
+              </ModalHeader>
+              
+              <ModalBody>
+                <Textarea
+                  ref={modalTextareaRef}
+                  value={modalNoteContent}
+                  onValueChange={setModalNoteContent}
+                  variant="bordered"
+                  minRows={12}
+                  maxRows={25}
+                  placeholder="输入笔记内容..."
+                  classNames={{
+                    base: "w-full",
+                    input: "text-white leading-relaxed font-mono resize-none placeholder:text-gray-400",
+                    inputWrapper: "bg-[#2a2a2e] border-[#f5a524]/50 data-[focus=true]:border-[#f5a524] transition-colors duration-200"
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      saveModalNote();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      onNoteModalOpenChange();
+                    }
+                  }}
+                />
+              </ModalBody>
+
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </DragDropContext>
   );
 };

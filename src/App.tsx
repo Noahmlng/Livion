@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { HeroUIProvider } from '@heroui/react';
 import TodayView from './components/tabs/TodayView';
 import TasksView from './components/tabs/TasksView';
 import AppHeader from './components/layout/AppHeader';
@@ -77,40 +78,44 @@ function MainApp() {
       
       {/* 主应用界面 */}
       {!showLogin && (
-        <DbProvider>
-          <ValhallaTaskProvider>
-            <AppStateProvider>
-              <div className="min-h-screen bg-bg-dark text-text-primary font-body flex flex-col hide-scrollbar">
-              <div className="container mx-auto px-4 py-6 flex-shrink-0">
-                <div className="relative mb-4">
-                  <div className="flex justify-center">
-                    <AppHeader 
-                      tabs={TABS} 
-                      activeTab={activeTab} 
-                      onTabChange={setActiveTab} 
-                    />
+        <HeroUIProvider>
+          <div className="dark text-foreground bg-background">
+            <DbProvider>
+              <ValhallaTaskProvider>
+                <AppStateProvider>
+                  <div className="bg-bg-dark text-text-primary font-body overflow-auto" style={{ height: '100vh' }}>
+                    <div className="container mx-auto px-4 py-6">
+                      <div className="relative mb-4">
+                        <div className="flex justify-center">
+                          <AppHeader 
+                            tabs={TABS} 
+                            activeTab={activeTab} 
+                            onTabChange={setActiveTab} 
+                          />
+                        </div>
+                      </div>
+                      
+                      <main className="mt-6">
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            transition={{ duration: 0.3 }}
+                            className="pb-12"
+                          >
+                            <ActiveComponent />
+                          </motion.div>
+                        </AnimatePresence>
+                      </main>
+                    </div>
                   </div>
-                </div>
-                
-                <main className="mt-6 flex-1 overflow-auto hide-scrollbar" style={{ maxHeight: 'calc(100vh - 100px)' }}>
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={activeTab}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3 }}
-                      className="pb-12 h-full"
-                    >
-                      <ActiveComponent />
-                    </motion.div>
-                  </AnimatePresence>
-                </main>
-              </div>
-            </div>
-            </AppStateProvider>
-          </ValhallaTaskProvider>
-        </DbProvider>
+                </AppStateProvider>
+              </ValhallaTaskProvider>
+            </DbProvider>
+          </div>
+        </HeroUIProvider>
       )}
     </>
   );
