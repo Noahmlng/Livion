@@ -8,11 +8,50 @@ import defaultTaskImage from '../../assets/ac-valhalla-settlement.avif';
 import { useDb } from '../../context/DbContext';
 import { useAppState } from '../../context/AppStateContext';
 import { Task } from '../../utils/database';
-import TextareaAutosize from 'react-textarea-autosize';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  Button,
+  Input,
+  Textarea,
+  Chip,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+  Divider,
+  ScrollShadow,
+  Progress,
+  Avatar
+} from '@heroui/react';
+
+// 添加隐藏滚动条的样式
+const hideScrollbarStyles = `
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
+// 动态添加样式到文档头部
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = hideScrollbarStyles;
+  if (!document.head.querySelector('style[data-scrollbar-hide]')) {
+    styleElement.setAttribute('data-scrollbar-hide', 'true');
+    document.head.appendChild(styleElement);
+  }
+}
 
 // Norse-style completion icon component
 const CompletionIcon = () => (
-  <div className="absolute -top-1 -left-1 w-6 h-6 bg-cyan-900/80 rounded-full flex items-center justify-center border border-cyan-600/50 z-10">
+  <div className="absolute -top-1 -left-1 w-6 h-6 bg-success/80 rounded-full flex items-center justify-center border border-success/50 z-10">
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
@@ -21,9 +60,8 @@ const CompletionIcon = () => (
       strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="w-3.5 h-3.5 text-cyan-300"
+      className="w-3.5 h-3.5 text-white"
     >
-      {/* A slightly Norse-inspired checkmark */}
       <polyline points="20 6 9 17 4 12" />
     </svg>
   </div>
@@ -43,26 +81,13 @@ const PriorityEnergyBar = ({
   const [dragPriority, setDragPriority] = useState(priority);
   const barRef = useRef<HTMLDivElement>(null);
 
-  const maxPriority = 10; // Allow up to 10 priority levels
+  const maxPriority = 10;
 
-  // Function to determine priority colors (same as in main component)
-  const getPriorityColor = (index: number, currentPriority: number) => {
-    if (index < currentPriority && index < 6) {
-      return [
-        'bg-amber-300', // Priority 1
-        'bg-orange-400', // Priority 2
-        'bg-rose-400', // Priority 3
-        'bg-red-500', // Priority 4
-        'bg-red-600', // Priority 5
-        'bg-red-700', // Priority 6
-      ][index] || 'bg-red-700';
-    }
-    
-    if (index < currentPriority && index >= 6) {
-      return 'bg-red-800'; // Higher priorities use dark red
-    }
-    
-    return 'bg-gray-600/30'; // Empty slots
+  const getPriorityColor = (currentPriority: number) => {
+    if (currentPriority <= 2) return 'success';
+    if (currentPriority <= 4) return 'warning';
+    if (currentPriority <= 6) return 'danger';
+    return 'primary';
   };
 
   const calculatePriorityFromPosition = (clientX: number) => {
@@ -119,55 +144,35 @@ const PriorityEnergyBar = ({
   const currentPriority = isDragging ? dragPriority : priority;
 
   return (
-    <div className="flex flex-col items-start">
-      <div 
-        ref={barRef}
-        className={`relative w-24 h-4 bg-slate-800/60 rounded border border-slate-700/40 overflow-hidden ${
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-        }`}
-        onMouseDown={handleMouseDown}
-        onClick={handleClick}
-      >
-        {/* Priority segments */}
-        {[...Array(maxPriority)].map((_, index) => (
-          <div
-            key={index}
-            className={`absolute top-0 h-full transition-all duration-150 ${
-              getPriorityColor(index, currentPriority)
-            }`}
-            style={{
-              left: `${(index / maxPriority) * 100}%`,
-              width: `${100 / maxPriority}%`,
-              borderRight: index < maxPriority - 1 ? '1px solid rgba(0,0,0,0.1)' : 'none'
-            }}
-          />
-        ))}
-        
-        {/* Drag indicator */}
-        {isDragging && (
-          <div 
-            className="absolute top-0 w-0.5 h-full bg-cyan-300 shadow-lg transition-all duration-75"
-            style={{
-              left: `${(dragPriority / maxPriority) * 100}%`,
-              transform: 'translateX(-50%)'
-            }}
-          />
-        )}
-        
-        {/* Current priority indicator */}
-        {!isDragging && (
-          <div 
-            className="absolute top-0 w-0.5 h-full bg-cyan-200 shadow-md transition-all duration-200"
-            style={{
-              left: `${(currentPriority / maxPriority) * 100}%`,
-              transform: 'translateX(-50%)'
-            }}
-          />
-        )}
+    <div className="flex flex-col items-start gap-2">
+      <div className="text-xs text-default-600 font-mono font-bold tracking-wider">
+        PRIORITY LEVEL
       </div>
-      
-      <div className="text-[10px] text-slate-400 mt-1 font-mono">
-        {currentPriority}
+      <div className="flex items-center gap-3">
+        <Progress
+          ref={barRef}
+          value={(currentPriority / maxPriority) * 100}
+          color={getPriorityColor(currentPriority)}
+          size="lg"
+          className={`w-32 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          onMouseDown={handleMouseDown}
+          onClick={handleClick}
+          classNames={{
+            base: "max-w-md",
+            track: "drop-shadow-md border border-default",
+            indicator: "bg-gradient-to-r from-danger-500 to-warning-500",
+            label: "tracking-wider text-default-600 font-mono",
+            value: "text-foreground font-mono",
+          }}
+        />
+        <Chip
+          color={getPriorityColor(currentPriority)}
+          variant="solid"
+          size="sm"
+          className="font-mono font-bold"
+        >
+          {currentPriority}
+        </Chip>
       </div>
     </div>
   );
@@ -205,9 +210,19 @@ const TasksView = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   
+  // 任务详情编辑弹窗
+  const { isOpen: isTaskModalOpen, onOpen: onTaskModalOpen, onOpenChange: onTaskModalOpenChange } = useDisclosure();
+  const [modalTaskContent, setModalTaskContent] = useState({
+    title: '',
+    description: ''
+  });
+  
   // Refs for editable elements
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const modalTitleRef = useRef<HTMLInputElement>(null);
+  const modalDescriptionRef = useRef<HTMLTextAreaElement>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Filter to just get the side quests / challenges tasks
   const challengeTasks = tasks.filter(task => 
@@ -245,7 +260,7 @@ const TasksView = () => {
       
       // If the task still exists, keep the current selection
       if (updatedTask) {
-        // Task still exists, no need to update
+        // Task still exists, no need to update editing values here
       } else if (challengeTasks.length > 0) {
         // If the task doesn't exist, select the first task
         setSelectedTaskId(challengeTasks[0].task_id);
@@ -257,6 +272,18 @@ const TasksView = () => {
     }
   }, [tasks, challengeTasks]);
   
+  // Initialize editing state when a new task is selected (simplified)
+  useEffect(() => {
+    if (selectedTask) {
+      setEditingValues({
+        title: selectedTask.name,
+        reward: selectedTask.reward_points || 0,
+        description: selectedTask.description || ''
+      });
+      setEditingDescription(true);
+    }
+  }, [selectedTask?.task_id]); // Only depend on task_id to avoid loops
+
   // Set focus when editing begins
   useEffect(() => {
     if (editingTitle && titleInputRef.current) {
@@ -291,36 +318,18 @@ const TasksView = () => {
     setEditingTitle(true);
   };
   
-  const startEditingReward = () => {
-    if (!selectedTask) return;
-    setEditingValues(prev => ({ ...prev, reward: selectedTask.reward_points || 0 }));
-    setEditingReward(true);
-  };
-  
-  const startEditingDescription = () => {
-    if (!selectedTask) return;
-    setEditingValues(prev => ({ ...prev, description: selectedTask.description }));
-    setEditingDescription(true);
-  };
-  
   const saveTitle = async () => {
     if (!selectedTask) return;
     await handleTaskUpdate(selectedTask.task_id.toString(), { name: editingValues.title });
     setEditingTitle(false);
   };
   
-  const saveReward = async () => {
-    if (!selectedTask) return;
-    await handleTaskUpdate(selectedTask.task_id.toString(), { 
-      reward_points: editingValues.reward 
-    });
-    setEditingReward(false);
-  };
+
   
   const saveDescription = async () => {
     if (!selectedTask) return;
     await handleTaskUpdate(selectedTask.task_id.toString(), { description: editingValues.description });
-    setEditingDescription(false);
+    // Keep editing state active for continuous editing
   };
   
   // Handler for updating priority
@@ -328,7 +337,6 @@ const TasksView = () => {
     event.stopPropagation();
     const task = challengeTasks.find(t => t.task_id.toString() === taskId);
     if (task) {
-      // Remove the upper limit of 3
       const newPriority = task.priority + 1;
       await handleTaskUpdate(taskId, { priority: newPriority });
     }
@@ -404,17 +412,17 @@ const TasksView = () => {
     if (index < priority && index < 6) {
       // Priority levels filled - using warm tones with distinct gradients
       return [
-        'bg-amber-300', // Priority 1 - 淡黄色
-        'bg-orange-400', // Priority 2 - 橙色
-        'bg-rose-400', // Priority 3 - 玫瑰色
-        'bg-red-500', // Priority 4 - 鲜红色
-        'bg-red-600', // Priority 5 - 深红色
-        'bg-red-700', // Priority 6 - 暗红色
-      ][index] || 'bg-accent-gold';
+        'bg-success', // Priority 1
+        'bg-warning', // Priority 2
+        'bg-danger', // Priority 3
+        'bg-danger', // Priority 4
+        'bg-danger', // Priority 5
+        'bg-danger', // Priority 6
+      ][index] || 'bg-danger';
     }
     
     // Empty priority indicators
-    return 'bg-gray-500/20';
+    return 'bg-default-300';
   };
   
   // Function to handle input changes
@@ -448,302 +456,524 @@ const TasksView = () => {
       setIsUpdating(false);
     }
   };
+
+  // 打开任务详情编辑弹窗
+  const openTaskModal = (task: Task) => {
+    setModalTaskContent({
+      title: task.name,
+      description: task.description || ''
+    });
+    onTaskModalOpen();
+    
+    // 聚焦到弹窗文本框
+    setTimeout(() => {
+      if (modalTitleRef.current) {
+        modalTitleRef.current.focus();
+      }
+    }, 100);
+  };
+
+  // 保存弹窗中的任务内容
+  const saveModalTask = async () => {
+    if (!selectedTask) return;
+
+    try {
+      await handleTaskUpdate(selectedTask.task_id.toString(), {
+        name: modalTaskContent.title.trim(),
+        description: modalTaskContent.description.trim()
+      });
+
+      // 关闭弹窗
+      onTaskModalOpenChange();
+    } catch (error) {
+      console.error('Error saving modal task:', error);
+    }
+  };
+
+  // 从弹窗删除任务
+  const deleteModalTask = async () => {
+    if (!selectedTask) return;
+    await handleDelete();
+    onTaskModalOpenChange();
+  };
   
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)]">
-      <div className="flex gap-6 flex-1 overflow-hidden">
+    <div className="flex flex-col gap-6 overflow-hidden">
+      <div className="flex gap-6 h-[600px]">
         {/* Left Column - Task List */}
-        <div className="w-64 valhalla-panel overflow-auto">
-          <div className="space-y-3 p-1">
-            {/* 新建任务按钮 */}
-            <motion.div
-              whileHover={{ x: 3 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleCreateTask}
-              className="p-3 cursor-pointer rounded-lg transition-all relative hover:bg-amber-100/70 text-slate-800 bg-amber-50/90 border border-amber-200/80 shadow-sm"
-            >
-              <div className="flex justify-between items-start">
-                <span className="font-semibold line-clamp-2 flex-1 flex items-center">
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    className="h-4 w-4 mr-2 text-amber-700" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={2} 
-                      d="M12 4v16m8-8H4" 
-                    />
-                  </svg>
-                  新建任务
-                </span>
-              </div>
-            </motion.div>
-            
-            {challengeTasks.map(task => (
-              <motion.div
-                key={task.task_id}
-                whileHover={{ x: 3 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setSelectedTaskId(task.task_id)}
-                className={`p-3 cursor-pointer rounded-lg transition-all relative ${
-                  selectedTask?.task_id === task.task_id 
-                    ? task.status === 'completed'
-                      ? 'bg-slate-700/90 text-slate-200 border border-cyan-900/50 shadow-md'
-                      : 'bg-slate-800/90 text-cyan-100 border border-cyan-800/50 shadow-md'
-                    : task.status === 'completed'
-                      ? 'hover:bg-slate-800/60 text-slate-300/90 bg-slate-900/30 border border-slate-700/20'
-                      : 'hover:bg-slate-800/60 text-wheat-100/90 bg-slate-900/40 border border-slate-700/30'
-                }`}
+        <Card className="w-80 bg-content1 border border-primary/50 shadow-lg">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-success"></div>
+          <ScrollShadow className="h-full">
+            <CardBody className="p-4 space-y-3">
+              {/* 新建任务按钮 */}
+              <Card 
+                isPressable
+                onPress={handleCreateTask}
+                className="relative cursor-pointer hover:scale-105 transition-all duration-300 bg-success/10 border border-success/50 hover:border-success"
               >
-                {/* Completion Icon */}
-                {task.status === 'completed' && <CompletionIcon />}
-                
-                <div className="flex justify-between items-start">
-                  <span className="font-semibold line-clamp-2 flex-1">
-                    {task.name}
-                  </span>
-                  <div 
-                    className="flex flex-col cursor-pointer ml-2 flex-shrink-0 mt-1 gap-1"
-                    onClick={(e) => increasePriority(task.task_id.toString(), e)}
-                  >
-                    {/* 第一行三个指示器 */}
-                    <div className="flex">
-                      {[...Array(3)].map((_, i) => (
-                        <div 
-                          key={i} 
-                          className={`w-2.5 h-2.5 mx-0.5 rounded-sm ${
-                            getPriorityColor(i, task.priority)
-                          } flex items-center justify-center text-[6px]`}
-                        />
-                      ))}
-                    </div>
-                    {/* 第二行三个指示器 */}
-                    <div className="flex">
-                      {[...Array(3)].map((_, i) => (
-                        <div 
-                          key={i+3} 
-                          className={`w-2.5 h-2.5 mx-0.5 rounded-sm ${
-                            getPriorityColor(i+3, task.priority)
-                          } flex items-center justify-center text-[6px]`}
-                        >
-                          {i === 2 && task.priority > 6 && "+"}
-                        </div>
-                      ))}
-                    </div>
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 bg-success rounded-full"></div>
+                    <span className="font-mono font-bold text-success tracking-wider">
+                      新建任务
+                    </span>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className="h-4 w-4 ml-auto text-success" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M12 4v16m8-8H4" 
+                      />
+                    </svg>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
+                </CardBody>
+              </Card>
+              
+              {challengeTasks.map(task => (
+                <Card
+                  key={task.task_id}
+                  isPressable
+                  onPress={() => setSelectedTaskId(task.task_id)}
+                  className={`relative transition-all duration-300 hover:scale-105 cursor-pointer ${
+                    selectedTask?.task_id === task.task_id 
+                      ? task.status === 'completed'
+                        ? 'bg-success/20 border-2 border-success shadow-lg'
+                        : 'bg-primary/20 border-2 border-primary shadow-lg'
+                      : task.status === 'completed'
+                        ? 'hover:bg-success/10 bg-content2 border border-success/30'
+                        : 'hover:bg-primary/10 bg-content2 border border-default/50'
+                  }`}
+                >
+                  {/* Completion Icon */}
+                  {task.status === 'completed' && <CompletionIcon />}
+                  
+                  <CardBody className="p-4">
+                    <div className="flex justify-between items-start">
+                      <span className="font-mono font-bold text-foreground line-clamp-2 flex-1">
+                        {task.name}
+                      </span>
+                      <div 
+                        className="flex flex-col cursor-pointer ml-2 flex-shrink-0 mt-1 gap-1"
+                        onClick={(e) => increasePriority(task.task_id.toString(), e)}
+                      >
+                        {/* 第一行三个指示器 */}
+                        <div className="flex">
+                          {[...Array(3)].map((_, i) => (
+                            <div 
+                              key={i} 
+                              className={`w-2.5 h-2.5 mx-0.5 rounded-sm transition-colors ${
+                                i < task.priority 
+                                  ? i === 0 ? 'bg-success' 
+                                    : i === 1 ? 'bg-warning' 
+                                    : 'bg-danger'
+                                  : 'bg-default-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        {/* 第二行三个指示器 */}
+                        <div className="flex">
+                          {[...Array(3)].map((_, i) => (
+                            <div 
+                              key={i+3} 
+                              className={`w-2.5 h-2.5 mx-0.5 rounded-sm transition-colors ${
+                                (i+3) < task.priority ? 'bg-danger' : 'bg-default-300'
+                              } flex items-center justify-center`}
+                            >
+                              {i === 2 && task.priority > 6 && (
+                                <span className="text-[6px] text-white font-bold">+</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    
+                                         {/* 状态显示 */}
+                     {task.status === 'completed' && (
+                       <div className="mt-2">
+                         <Chip
+                           color="success"
+                           variant="solid"
+                           size="sm"
+                           className="font-mono font-bold"
+                         >
+                           DONE
+                         </Chip>
+                       </div>
+                     )}
+                  </CardBody>
+                </Card>
+              ))}
+            </CardBody>
+          </ScrollShadow>
+        </Card>
         
-        {/* Right Column - Task Details with Background Image */}
-        <div className="flex-1 valhalla-panel overflow-auto relative">
+        {/* Right Column - Task Details */}
+        <Card className="flex-1 bg-content1 border border-primary/30 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary"></div>
+          
           {selectedTask && (
             <>
               {/* Background Image with Opacity */}
               <div className="absolute inset-0 z-0">
                 <div 
-                  className="w-full h-full bg-cover bg-center opacity-15"
-                  style={{ 
-                    backgroundImage: `url(${selectedTask.image_path || defaultTaskImage})`,
-                  }}
+                  className="w-full h-full bg-cover bg-center opacity-10"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-cyan-900/10 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent"></div>
               </div>
             </>
           )}
           
           {isUpdating && (
-            <div className="absolute inset-0 bg-slate-900/30 z-50 flex items-center justify-center">
-              <div className="animate-pulse text-cyan-400">更新中...</div>
+            <div className="absolute inset-0 bg-content1/80 z-50 flex items-center justify-center">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-primary rounded-full animate-bounce"></div>
+                <div className="w-3 h-3 bg-secondary rounded-full animate-bounce delay-100"></div>
+                <div className="w-3 h-3 bg-success rounded-full animate-bounce delay-200"></div>
+                <span className="text-primary font-mono tracking-wider ml-3 font-bold">UPDATING...</span>
+              </div>
             </div>
           )}
           
           {selectedTask ? (
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={selectedTask.task_id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="h-full flex flex-col relative z-10"
-              >
-                <div className="mb-4 pb-3 border-b border-cyan-800/30 px-4 pt-4">
-                  {editingTitle ? (
-                    <input
-                      ref={titleInputRef}
-                      className="text-xl font-display text-cyan-300 outline-none bg-transparent w-full border-b border-cyan-500/30 focus:border-cyan-500/50 px-1 py-2"
-                      value={editingValues.title}
-                      onChange={(e) => handleInputChange(e, 'title')}
-                      onBlur={saveTitle}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          saveTitle();
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2 py-2">
-                      <h2 
-                        className="text-xl font-display text-cyan-300 cursor-pointer"
-                        onClick={startEditingTitle}
-                      >
-                        {selectedTask.name}
-                      </h2>
+            <div className="relative z-10 h-full flex flex-col">
+                                              <CardBody className="flex-1 flex flex-col p-0">
+                  {/* Task Title */}
+                  <div className="p-6 pb-4 border-b border-divider">
+                    <div className="flex items-center gap-3">
+                      {editingTitle ? (
+                        <Input
+                          ref={titleInputRef}
+                          value={editingValues.title}
+                          onChange={(e) => handleInputChange(e, 'title')}
+                          onBlur={saveTitle}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              saveTitle();
+                            }
+                          }}
+                          variant="bordered"
+                          size="lg"
+                          classNames={{
+                            input: "text-xl font-mono font-bold text-foreground",
+                            inputWrapper: "bg-content2 border-primary/30"
+                          }}
+                        />
+                      ) : (
+                        <h2 
+                          className="text-2xl font-mono font-bold text-primary cursor-pointer hover:text-primary/80 transition-colors"
+                          onClick={startEditingTitle}
+                        >
+                          {selectedTask.name}
+                        </h2>
+                      )}
                       
                       {selectedTask.status === 'completed' && (
-                        <span className="bg-cyan-900/80 rounded-full p-1 inline-flex">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="w-4 h-4 text-cyan-300"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        </span>
+                        <Chip
+                          color="success"
+                          variant="solid"
+                          className="font-mono font-bold"
+                          startContent={
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="w-4 h-4"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          }
+                        >
+                          COMPLETED
+                        </Chip>
                       )}
                     </div>
-                  )}
-                </div>
-                
-                <div className="flex-1 mb-4 overflow-auto">
-                  {editingDescription ? (
-                    <TextareaAutosize
+                  </div>
+                  
+                                    {/* Task Description - 填满空间，隐藏滚动条 */}
+                  <div className="flex-1 p-0" style={{ minHeight: '400px' }}>
+                    <Textarea
                       ref={descriptionTextareaRef}
-                      className="w-full prose prose-invert max-w-none outline-none bg-slate-800/40 p-4 rounded-md border border-cyan-900/20 focus:border-cyan-900/40 resize-none"
-                      value={editingValues.description}
-                      onChange={(e) => handleInputChange(e, 'description')}
-                      onBlur={saveDescription}
+                      value={editingValues.description || ''}
+                      onValueChange={(value) => {
+                        setEditingValues(prev => ({ ...prev, description: value }));
+                        // Auto-save after a short delay
+                        if (autoSaveTimeoutRef.current) {
+                          clearTimeout(autoSaveTimeoutRef.current);
+                        }
+                        autoSaveTimeoutRef.current = setTimeout(() => {
+                          if (selectedTask) {
+                            handleTaskUpdate(selectedTask.task_id.toString(), { description: value });
+                          }
+                        }, 1000);
+                      }}
+                      variant="flat"
+                      placeholder="输入任务详情..."
+                      isDisabled={false}
+                      minRows={20}
+                      classNames={{
+                        base: "w-full h-full scrollbar-hide",
+                        input: "text-foreground leading-relaxed font-mono resize-none placeholder:text-default-400 p-6 bg-transparent scrollbar-hide overflow-y-auto min-h-full",
+                        inputWrapper: "bg-transparent border-0 shadow-none h-full data-[focus=true]:bg-transparent data-[hover=true]:bg-transparent scrollbar-hide min-h-full"
+                      }}
                       onKeyDown={(e) => {
-                        // Don't save on Enter, allow multi-line input
-                        if (e.key === 'Enter' && e.shiftKey) {
-                          // Save only on Shift+Enter if needed
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                           e.preventDefault();
                           saveDescription();
                         }
                       }}
-                      minRows={4}
-                      spellCheck={false}
                     />
-                  ) : (
-                    <div 
-                      className="prose prose-invert max-w-none cursor-pointer bg-slate-800/40 p-4 rounded-md whitespace-pre-wrap"
-                      onClick={startEditingDescription}
-                    >
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                        components={{
-                          // Handle line breaks specifically
-                          p: ({ children }: { children: React.ReactNode }) => <p className="whitespace-pre-line">{children}</p>
-                        }}
-                      >
-                        {selectedTask.description}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="flex justify-between items-end gap-3 mt-auto pt-3 border-t border-cyan-800/30">
-                  {/* Priority Energy Bar on the left */}
-                  <PriorityEnergyBar
-                    priority={selectedTask.priority}
-                    onPriorityChange={handlePriorityChange}
-                    disabled={isUpdating}
-                  />
-                  
-                  {/* Action buttons on the right */}
-                  <div className="flex gap-3">
+                  </div>
+                </CardBody>
+
+              <Divider />
+
+                             <div className="p-6 bg-content2/50">
+                 <div className="flex justify-between items-end">
+                   {/* Left side: Priority */}
+                   <div className="flex items-end gap-6">
+                     {/* Priority Energy Bar */}
+                     <PriorityEnergyBar
+                       priority={selectedTask.priority}
+                       onPriorityChange={handlePriorityChange}
+                       disabled={isUpdating}
+                     />
+                   </div>
+                   
+                   {/* Action buttons */}
+                   <div className="flex gap-3">
                     {!showDeleteConfirm ? (
                       <>
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-transparent text-red-400 border border-red-500/50 font-display uppercase tracking-wider text-sm rounded-md"
+                        <Button
+                          variant="bordered"
+                          color="danger"
                           onClick={confirmDelete}
+                          className="font-mono font-bold tracking-wider"
                         >
-                          删除
-                        </motion.button>
+                          删除任务
+                        </Button>
                         
                         {selectedTask.status === 'completed' ? (
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md border border-cyan-600/30"
+                          <Button
+                            color="warning"
+                            variant="solid"
                             onClick={completeTask}
+                            className="font-mono font-bold tracking-wider shadow-lg"
                           >
                             恢复任务
-                          </motion.button>
+                          </Button>
                         ) : (
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="px-4 py-2 bg-cyan-800/80 text-cyan-50 font-display tracking-wider text-sm rounded-md shadow-md border border-cyan-600/30"
+                          <Button
+                            color="success"
+                            variant="solid"
                             onClick={completeTask}
+                            className="font-mono font-bold tracking-wider shadow-lg"
                           >
                             完成任务
-                          </motion.button>
+                          </Button>
                         )}
                       </>
                     ) : (
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="px-4 py-2 bg-red-700/80 text-white font-display uppercase tracking-wider text-sm rounded-md"
+                      <Button
+                        color="danger"
+                        variant="solid"
                         onClick={handleDelete}
+                        className="font-mono font-bold tracking-wider"
                       >
                         确认删除
-                      </motion.button>
+                      </Button>
                     )}
                   </div>
                 </div>
-              </motion.div>
-            </AnimatePresence>
-          ) : (
-            <div className="flex items-center justify-center h-full text-slate-400">
-              Select a challenge to view details
+              </div>
             </div>
+          ) : (
+            <CardBody className="flex items-center justify-center h-full">
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 border-2 border-dashed border-default/50 rounded-lg flex items-center justify-center mx-auto">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-default/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <p className="text-default-600 text-lg font-mono font-bold">SELECT_MISSION</p>
+                <p className="text-default-500 text-sm font-mono tracking-wider">从左侧选择一个任务查看详情</p>
+              </div>
+            </CardBody>
           )}
           
           {showCropper && imageFile && (
             <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-              <div className="bg-slate-900 p-4 rounded-lg max-w-3xl w-full border border-cyan-900/30">
-                <h3 className="text-xl font-display text-cyan-400 mb-4">
-                  Crop Image
-                </h3>
+              <Card className="max-w-3xl w-full m-4 border border-primary/50">
+                <CardHeader className="border-b border-divider">
+                  <h3 className="text-xl font-mono font-bold text-primary tracking-wider">
+                    CROP IMAGE
+                  </h3>
+                </CardHeader>
                 
-                <div className="mb-4">
+                <CardBody className="p-6">
                   <ReactCropperPro
                     src={URL.createObjectURL(imageFile)}
                     onChange={handleCropComplete}
                     aspectRatio={16/9}
                   />
-                </div>
+                </CardBody>
                 
-                <div className="flex justify-end gap-3">
-                  <button
-                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded border border-slate-700"
+                <Divider />
+                
+                <div className="p-4 flex justify-end gap-3">
+                  <Button
+                    variant="bordered"
                     onClick={() => setShowCropper(false)}
+                    className="font-mono font-bold"
                   >
-                    Cancel
-                  </button>
+                    取消
+                  </Button>
                 </div>
-              </div>
+              </Card>
             </div>
           )}
-        </div>
+        </Card>
       </div>
+
+      {/* 任务详情编辑弹窗 - 参考笔记编辑弹窗设计 */}
+      <Modal 
+        isOpen={isTaskModalOpen} 
+        onOpenChange={onTaskModalOpenChange}
+        scrollBehavior="inside"
+        size="2xl"
+        classNames={{
+          base: "shadow-lg rounded-lg overflow-hidden",
+          header: "border-b bg-content2 border-primary rounded-t-lg",
+          body: "py-6 bg-content1",
+          footer: "border-t bg-content2 border-primary rounded-b-lg"
+        }}
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-3 h-3 bg-success rounded-full"></div>
+                    <div className="w-3 h-3 bg-warning rounded-full"></div>
+                    <div className="w-3 h-3 bg-danger rounded-full"></div>
+                  </div>
+                  <h2 className="text-primary font-mono text-sm tracking-widest font-bold">
+                    编辑任务详情
+                  </h2>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {selectedTask?.status === 'completed' && (
+                    <Chip
+                      color="success"
+                      variant="solid"
+                      size="sm"
+                      className="font-mono text-xs tracking-wider font-bold"
+                    >
+                      已完成
+                    </Chip>
+                  )}
+                </div>
+              </ModalHeader>
+              
+              <ModalBody className="space-y-6">
+                {/* 任务标题 */}
+                <div className="space-y-2">
+                  <label className="text-xs text-default-600 font-mono font-bold tracking-wider">
+                    任务标题
+                  </label>
+                  <Input
+                    ref={modalTitleRef}
+                    value={modalTaskContent.title}
+                    onValueChange={(value) => setModalTaskContent(prev => ({ ...prev, title: value }))}
+                    variant="bordered"
+                    size="lg"
+                    placeholder="输入任务标题..."
+                    classNames={{
+                      input: "font-mono font-bold text-foreground",
+                      inputWrapper: "bg-content2 border-primary/30 data-[focus=true]:border-primary"
+                    }}
+                  />
+                </div>
+
+                
+
+                {/* 任务描述 */}
+                <div className="space-y-2">
+                  <label className="text-xs text-default-600 font-mono font-bold tracking-wider">
+                    任务描述
+                  </label>
+                  <Textarea
+                    ref={modalDescriptionRef}
+                    value={modalTaskContent.description}
+                    onValueChange={(value) => setModalTaskContent(prev => ({ ...prev, description: value }))}
+                    variant="bordered"
+                    minRows={8}
+                    maxRows={15}
+                    placeholder="输入任务描述..."
+                    classNames={{
+                      base: "w-full",
+                      input: "font-mono text-foreground leading-relaxed",
+                      inputWrapper: "bg-content2 border-primary/30 data-[focus=true]:border-primary"
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        saveModalTask();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        onTaskModalOpenChange();
+                      }
+                    }}
+                  />
+                </div>
+              </ModalBody>
+
+              <ModalFooter className="flex justify-between">
+                <Button
+                  variant="bordered"
+                  color="danger"
+                  onClick={deleteModalTask}
+                  className="font-mono font-bold"
+                >
+                  删除任务
+                </Button>
+                
+                <div className="flex gap-3">
+                  <Button 
+                    variant="bordered"
+                    onClick={onClose}
+                    className="font-mono font-bold"
+                  >
+                    取消
+                  </Button>
+                  <Button 
+                    color="primary"
+                    variant="solid"
+                    onClick={saveModalTask}
+                    className="shadow-lg font-mono font-bold"
+                  >
+                    保存更改
+                  </Button>
+                </div>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </div>
   );
 };
