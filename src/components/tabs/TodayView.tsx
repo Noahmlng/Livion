@@ -1907,9 +1907,19 @@ const TodayView = () => {
           ref={historyContainerRef}
           className="flex-1 p-4 hide-scrollbar flex items-center justify-center"
         >
-          <div className="text-center">
-            <p className="text-text-secondary text-lg">暂无历史任务记录</p>
-          </div>
+          <Card className="relative text-center py-12 bg-content1 border border-default/50">
+            <CardBody>
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 border-2 border-dashed border-default/50 rounded-lg flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-default/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-default-600 text-lg font-mono font-bold">NO_HISTORY_DATA</p>
+                <p className="text-default-500 text-sm font-mono tracking-wider">暂无历史任务记录</p>
+              </div>
+            </CardBody>
+          </Card>
         </div>
       );
     }
@@ -1921,38 +1931,71 @@ const TodayView = () => {
       >
         <div className="grid grid-cols-2 gap-4 pb-4">
           {taskHistory.map((day) => (
-            <div key={day.date.toISOString()} className="valhalla-panel p-4">
-              <h3 className="font-medium text-accent-gold mb-3">{day.formattedDate}</h3>
-              <div className="space-y-2">
-                {/* 按照时间段排序任务 */}
-                {[...day.tasks]
-                  .sort((a, b) => {
-                    const timeSlotOrder = { 'morning': 0, 'afternoon': 1, 'evening': 2 };
-                    return timeSlotOrder[a.timeSlot] - timeSlotOrder[b.timeSlot];
-                  })
-                  .map((task) => (
-                    <div 
-                      key={task.id} 
-                      className="flex items-center p-2 rounded bg-bg-panel/50 border border-border-metal"
-                    >
-                      <div className={`w-2 h-2 rounded-full mr-2 ${task.completed ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className={task.completed ? '' : 'text-red-400'}>
-                        {task.title}
-                      </span>
-                      <span className="ml-auto text-xs opacity-70">
-                        {TIME_SLOTS.find(s => s.id === task.timeSlot)?.name}
-                      </span>
-                    </div>
-                  ))
-                }
-              </div>
-            </div>
+            <Card key={day.date.toISOString()} className="relative bg-content1 border border-primary/30 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-success"></div>
+              <CardHeader className="border-b border-divider bg-content2/50">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="flex gap-1">
+                    <div className="w-3 h-3 bg-primary rounded-full"></div>
+                    <div className="w-3 h-3 bg-secondary rounded-full"></div>
+                    <div className="w-3 h-3 bg-success rounded-full"></div>
+                  </div>
+                  <h3 className="font-mono font-bold text-primary tracking-wider text-sm">{day.formattedDate}</h3>
+                </div>
+              </CardHeader>
+              <CardBody className="p-4">
+                <div className="space-y-3">
+                  {/* 按照时间段排序任务 */}
+                  {[...day.tasks]
+                    .sort((a, b) => {
+                      const timeSlotOrder = { 'morning': 0, 'afternoon': 1, 'evening': 2 };
+                      return timeSlotOrder[a.timeSlot] - timeSlotOrder[b.timeSlot];
+                    })
+                    .map((task) => {
+                      const slotColors = {
+                        morning: { dot: 'bg-warning', text: 'text-warning' },
+                        afternoon: { dot: 'bg-primary', text: 'text-primary' },
+                        evening: { dot: 'bg-secondary', text: 'text-secondary' }
+                      };
+                      const colorScheme = slotColors[task.timeSlot];
+                      
+                      return (
+                        <div 
+                          key={task.id} 
+                          className="flex items-center p-3 rounded-lg bg-content2 border border-divider hover:border-primary/50 transition-colors duration-200"
+                        >
+                          <div className={`w-3 h-3 rounded-full mr-3 ${task.completed ? 'bg-success' : 'bg-danger'}`}></div>
+                          <span className={`flex-1 text-sm font-mono font-bold ${task.completed ? 'text-foreground' : 'text-danger'}`}>
+                            {task.title}
+                          </span>
+                          <Chip
+                            color={task.timeSlot === 'morning' ? 'warning' : task.timeSlot === 'afternoon' ? 'primary' : 'secondary'}
+                            variant="flat"
+                            size="sm"
+                            className="font-mono text-xs tracking-wider font-bold ml-2"
+                          >
+                            {TIME_SLOTS.find(s => s.id === task.timeSlot)?.name}
+                          </Chip>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+              </CardBody>
+            </Card>
           ))}
         </div>
         {loading && (
-          <div className="text-center pt-4 pb-2">
-            <p className="text-accent-gold">加载更多数据中...</p>
-          </div>
+          <Card className="relative text-center py-8 bg-content1 border border-primary/30">
+            <CardBody>
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-3 h-3 bg-primary rounded-full animate-bounce"></div>
+                <div className="w-3 h-3 bg-secondary rounded-full animate-bounce delay-100"></div>
+                <div className="w-3 h-3 bg-success rounded-full animate-bounce delay-200"></div>
+                <p className="text-primary font-mono tracking-wider ml-3 font-bold">LOADING_DATA...</p>
+              </div>
+            </CardBody>
+          </Card>
         )}
       </div>
     );
