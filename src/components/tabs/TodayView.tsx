@@ -1914,7 +1914,7 @@ const TodayView = () => {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-default/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </div>
+          </div>
                 <p className="text-default-600 text-lg font-mono font-bold">NO_HISTORY_DATA</p>
                 <p className="text-default-500 text-sm font-mono tracking-wider">暂无历史任务记录</p>
               </div>
@@ -1945,12 +1945,12 @@ const TodayView = () => {
               </CardHeader>
               <CardBody className="p-4">
                 <div className="space-y-3">
-                  {/* 按照时间段排序任务 */}
-                  {[...day.tasks]
-                    .sort((a, b) => {
-                      const timeSlotOrder = { 'morning': 0, 'afternoon': 1, 'evening': 2 };
-                      return timeSlotOrder[a.timeSlot] - timeSlotOrder[b.timeSlot];
-                    })
+                {/* 按照时间段排序任务 */}
+                {[...day.tasks]
+                  .sort((a, b) => {
+                    const timeSlotOrder = { 'morning': 0, 'afternoon': 1, 'evening': 2 };
+                    return timeSlotOrder[a.timeSlot] - timeSlotOrder[b.timeSlot];
+                  })
                     .map((task) => {
                       const slotColors = {
                         morning: { dot: 'bg-warning', text: 'text-warning' },
@@ -1960,27 +1960,27 @@ const TodayView = () => {
                       const colorScheme = slotColors[task.timeSlot];
                       
                       return (
-                        <div 
-                          key={task.id} 
+                    <div 
+                      key={task.id} 
                           className="flex items-center p-3 rounded-lg bg-content2 border border-divider hover:border-primary/50 transition-colors duration-200"
-                        >
+                    >
                           <div className={`w-3 h-3 rounded-full mr-3 ${task.completed ? 'bg-success' : 'bg-danger'}`}></div>
                           <span className={`flex-1 text-sm font-mono font-bold ${task.completed ? 'text-foreground' : 'text-danger'}`}>
-                            {task.title}
-                          </span>
+                        {task.title}
+                      </span>
                           <Chip
                             color={task.timeSlot === 'morning' ? 'warning' : task.timeSlot === 'afternoon' ? 'primary' : 'secondary'}
                             variant="flat"
                             size="sm"
                             className="font-mono text-xs tracking-wider font-bold ml-2"
                           >
-                            {TIME_SLOTS.find(s => s.id === task.timeSlot)?.name}
+                        {TIME_SLOTS.find(s => s.id === task.timeSlot)?.name}
                           </Chip>
-                        </div>
+                    </div>
                       );
                     })
-                  }
-                </div>
+                }
+              </div>
               </CardBody>
             </Card>
           ))}
@@ -1993,7 +1993,7 @@ const TodayView = () => {
                 <div className="w-3 h-3 bg-secondary rounded-full animate-bounce delay-100"></div>
                 <div className="w-3 h-3 bg-success rounded-full animate-bounce delay-200"></div>
                 <p className="text-primary font-mono tracking-wider ml-3 font-bold">LOADING_DATA...</p>
-              </div>
+          </div>
             </CardBody>
           </Card>
         )}
