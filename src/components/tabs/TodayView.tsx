@@ -768,6 +768,11 @@ const TodayView = () => {
     
     // 为每个时间段合并排序：保留现有排序中仍然存在的任务，然后添加新任务
     const mergeTaskOrder = (currentSlotOrder: string[], newSlotTasks: string[]) => {
+      // 如果当前没有排序信息，直接使用新任务列表
+      if (!currentSlotOrder || currentSlotOrder.length === 0) {
+        return newSlotTasks;
+      }
+      
       // 保留现有排序中仍然存在的任务
       const existingTasks = currentSlotOrder.filter(taskId => newSlotTasks.includes(taskId));
       // 添加新任务（不在现有排序中的）
@@ -1577,7 +1582,7 @@ const TodayView = () => {
     
     const newCompletedState = !taskToUpdate.completed;
     
-    // 更新本地状态
+    // 只更新本地状态，不重新加载数据
     setScheduledTasks(prev => 
       prev.map(task => task.id === taskId ? { ...task, completed: newCompletedState } : task)
     );
@@ -1586,6 +1591,8 @@ const TodayView = () => {
     await updateScheduleEntry(taskId, { 
       status: newCompletedState ? 'completed' : 'ongoing' 
     });
+    
+    // 不再调用 loadTodayScheduleEntries()，避免重新排序
   };
   
   // 获取支线任务和日常任务
@@ -1646,6 +1653,7 @@ const TodayView = () => {
     // 清除编辑状态
     setEditingTaskId(null);
     setEditingText('');
+    // 确认：不调用 loadTodayScheduleEntries()，避免重新排序
   };
 
   // 取消编辑
@@ -1698,24 +1706,45 @@ const TodayView = () => {
     
     const result = await createScheduleEntry(createData);
     
+    if (result) {
+      // 创建新任务对象并添加到本地状态
+      const newTask: ScheduledTask = {
+        id: result.entry_id.toString(),
+        title: result.custom_name || title,
+        timeSlot: result.slot as TimeSlot,
+        sourceType: 'custom',
+        sourceId: undefined,
+        reward: result.reward_points,
+        completed: false
+      };
+      
+      // 更新本地状态
+      setScheduledTasks(prev => [...prev, newTask]);
+      
+      // 更新临时排序状态，将新任务添加到末尾
+      const updatedOrder = {
+        ...temporaryTaskOrder,
+        [timeSlot]: [...temporaryTaskOrder[timeSlot], newTask.id]
+      };
+      setTemporaryTaskOrder(updatedOrder);
+    }
+    
     // 清空输入框
     setNewTaskText({ ...newTaskText, [timeSlot]: '' });
     
-    // 重新加载今天的任务
-    await loadTodayScheduleEntries();
-    
-    // 后面执行完数据库创建后，也要更新临时排序状态
-    if (result) {
-      setTemporaryTaskOrder({
-        ...temporaryTaskOrder,
-        [timeSlot]: [...temporaryTaskOrder[timeSlot], result.entry_id]
-      });
-    }
+    // 不再调用 loadTodayScheduleEntries()，避免重新排序
   };
   
   // 删除任务
   const handleDeleteTask = async (taskId: string) => {
-    // 先从临时排序中移除
+    // 先从本地状态中移除任务
+    const taskToDelete = scheduledTasks.find(task => task.id === taskId);
+    if (!taskToDelete) return;
+    
+    // 更新本地状态
+    setScheduledTasks(prev => prev.filter(task => task.id !== taskId));
+    
+    // 从临时排序中移除
     const newOrder = { ...temporaryTaskOrder };
     // 在所有时间段中查找并移除该任务ID
     Object.keys(newOrder).forEach(slot => {
@@ -1725,8 +1754,8 @@ const TodayView = () => {
     
     // 然后从数据库中删除
     await deleteScheduleEntry(taskId);
-    // 重新加载数据
-    await loadTodayScheduleEntries();
+    
+    // 不再调用 loadTodayScheduleEntries()，避免重新排序
   };
   
   // 将任务从一个时间段移动到另一个时间段
@@ -1752,13 +1781,22 @@ const TodayView = () => {
     const allTasksInSlot = scheduledTasks.filter(task => task.timeSlot === slot);
     
     // 根据临时排序状态获取任务
-    const orderedTasks = temporaryTaskOrder[slot]
+    const orderedTaskIds = temporaryTaskOrder[slot] || [];
+    const orderedTasks = orderedTaskIds
       .map(taskId => allTasksInSlot.find(task => task.id === taskId))
       .filter(task => task !== undefined) as ScheduledTask[];
     
     // 确保所有任务都在显示（以防有新任务但临时状态未更新）
-    const unseenTasks = allTasksInSlot.filter(task => !temporaryTaskOrder[slot].includes(task.id));
+    const unseenTasks = allTasksInSlot.filter(task => !orderedTaskIds.includes(task.id));
     const tasksInSlot = [...orderedTasks, ...unseenTasks];
+    
+    console.log(`Rendering slot ${slot}:`, {
+      allTasksInSlot: allTasksInSlot.map(t => ({ id: t.id, title: t.title })),
+      orderedTaskIds,
+      orderedTasks: orderedTasks.map(t => ({ id: t.id, title: t.title })),
+      unseenTasks: unseenTasks.map(t => ({ id: t.id, title: t.title })),
+      finalTasksInSlot: tasksInSlot.map(t => ({ id: t.id, title: t.title }))
+    });
     
     return (
       <div key={slot} className="flex-1 flex items-stretch">
@@ -2147,8 +2185,30 @@ const TodayView = () => {
         const result = await createScheduleEntry(newEntry);
         console.log('Create result:', result);
         
-        // 重新加载今天的任务
-        await loadTodayScheduleEntries();
+        if (result) {
+          // 创建新任务对象并添加到本地状态
+          const newScheduledTask: ScheduledTask = {
+            id: result.entry_id.toString(),
+            title: result.custom_name || task.title,
+            timeSlot: result.slot as TimeSlot,
+            sourceType: taskType as 'challenge' | 'template' | 'custom',
+            sourceId: taskType === 'challenge' ? task.id : task.id,
+            reward: result.reward_points,
+            completed: false
+          };
+          
+          // 更新本地状态
+          setScheduledTasks(prev => [...prev, newScheduledTask]);
+          
+          // 更新临时排序状态，将新任务添加到目标时间段的指定位置
+          const updatedOrder = { ...temporaryTaskOrder };
+          const destSlotTasks = [...updatedOrder[destination.droppableId as TimeSlot]];
+          destSlotTasks.splice(destination.index, 0, newScheduledTask.id);
+          updatedOrder[destination.droppableId as TimeSlot] = destSlotTasks;
+          setTemporaryTaskOrder(updatedOrder);
+        }
+        
+        // 不再调用 loadTodayScheduleEntries()，避免重新排序
         
       } catch (error) {
         console.error('Error in drag-and-drop operation:', error);
@@ -2161,61 +2221,68 @@ const TodayView = () => {
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
       
       try {
-        // 找出要移动的任务
-        const sourceSlot = source.droppableId as TimeSlot;
-        const destSlot = destination.droppableId as TimeSlot;
-        
-        // 获取当前的临时排序状态
-        const currentOrder = { ...temporaryTaskOrder };
-        
-        // 根据临时排序获取对应的任务ID
-        if (!currentOrder[sourceSlot] || source.index >= currentOrder[sourceSlot].length) {
-          console.error('Invalid source index or missing task order');
+        // 从draggableId中提取任务ID（格式：task-{id}-{slot}）
+        const taskIdMatch = draggableId.match(/^task-(\d+)-/);
+        if (!taskIdMatch) {
+          console.error('Invalid draggableId format:', draggableId);
           return;
         }
         
-        const taskIdToMove = currentOrder[sourceSlot][source.index];
+        const taskIdToMove = taskIdMatch[1];
+        const sourceSlot = source.droppableId as TimeSlot;
+        const destSlot = destination.droppableId as TimeSlot;
         
         console.log('Moving task:', { 
-          sourceSlot, 
-          destSlot, 
           taskIdToMove,
-          currentOrder
+          sourceSlot, 
+          destSlot,
+          sourceIndex: source.index,
+          destIndex: destination.index
         });
         
-        // 从源位置移除
-        currentOrder[sourceSlot] = currentOrder[sourceSlot].filter(id => id !== taskIdToMove);
+        // 获取当前的临时排序状态的副本
+        const newOrder = { ...temporaryTaskOrder };
         
         if (sourceSlot === destSlot) {
-          // 在同一时间段内重新排序 - 更新临时状态并保持持久化
+          // 在同一时间段内重新排序
+          const items = [...newOrder[sourceSlot]];
           
-          // 在正确的位置插入
-          const newOrder = [...currentOrder[destSlot]];
-          newOrder.splice(destination.index, 0, taskIdToMove);
-          currentOrder[destSlot] = newOrder;
+          // 从源位置移除任务
+          const [removed] = items.splice(source.index, 1);
           
-          // 更新临时排序状态
-          setTemporaryTaskOrder(currentOrder);
+          // 在目标位置插入任务
+          items.splice(destination.index, 0, removed);
+          
+          // 更新排序状态
+          newOrder[sourceSlot] = items;
           
           console.log('Same slot reordering completed:', {
             slot: sourceSlot,
-            newOrder: currentOrder[destSlot]
+            oldOrder: temporaryTaskOrder[sourceSlot],
+            newOrder: items
           });
         } else {
-          // 在不同时间段之间移动 - 更新任务的时间段属性并保存到数据库
+          // 在不同时间段之间移动
           
-          // 直接在目标位置插入
-          const newOrder = [...currentOrder[destSlot]];
-          newOrder.splice(destination.index, 0, taskIdToMove);
-          currentOrder[destSlot] = newOrder;
+          // 从源时间段移除任务
+          const sourceItems = [...newOrder[sourceSlot]];
+          sourceItems.splice(source.index, 1);
+          newOrder[sourceSlot] = sourceItems;
           
-          setTemporaryTaskOrder(currentOrder);
+          // 添加到目标时间段
+          const destItems = [...newOrder[destSlot]];
+          destItems.splice(destination.index, 0, taskIdToMove);
+          newOrder[destSlot] = destItems;
           
-          // 如果时间段发生了变化，更新数据库
+          // 更新数据库中的时间段
           await moveTaskBetweenSlots(taskIdToMove, destSlot);
         }
+        
+        // 更新临时排序状态
+        setTemporaryTaskOrder(newOrder);
+        
       } catch (error) {
-        console.error('Error moving task between slots:', error);
+        console.error('Error moving task:', error);
       }
     }
   };
