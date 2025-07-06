@@ -2682,15 +2682,25 @@ const TodayView = () => {
                             {/* 任务区域 */}
                             <div className="flex-1 p-4 bg-content1">
                               <Droppable droppableId={slot} direction="vertical">
-                                {(provided: any, snapshot: any) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.droppableProps}
-                                    className={`space-y-2 min-h-[100px] ${
-                                      snapshot.isDraggingOver ? 'bg-primary/20 border-2 border-dashed border-primary rounded-lg p-3' : ''
-                                    }`}
-                                  >
-                                    {scheduledTasks.filter(task => task.timeSlot === slot).map((task, taskIndex) => (
+                                {(provided: any, snapshot: any) => {
+                                  // 使用正确的排序逻辑
+                                  const allTasksInSlot = scheduledTasks.filter(task => task.timeSlot === slot);
+                                  const orderedTaskIds = temporaryTaskOrder[slot] || [];
+                                  const orderedTasks = orderedTaskIds
+                                    .map(taskId => allTasksInSlot.find(task => task.id === taskId))
+                                    .filter(task => task !== undefined) as ScheduledTask[];
+                                  const unseenTasks = allTasksInSlot.filter(task => !orderedTaskIds.includes(task.id));
+                                  const tasksInSlot = [...orderedTasks, ...unseenTasks];
+                                  
+                                  return (
+                                    <div
+                                      ref={provided.innerRef}
+                                      {...provided.droppableProps}
+                                      className={`space-y-2 min-h-[100px] ${
+                                        snapshot.isDraggingOver ? 'bg-primary/20 border-2 border-dashed border-primary rounded-lg p-3' : ''
+                                      }`}
+                                    >
+                                      {tasksInSlot.map((task, taskIndex) => (
                                       <Draggable key={`task-${task.id}-${slot}`} draggableId={`task-${task.id}-${slot}`} index={taskIndex}>
                                         {(provided: any, snapshot: any) => (
                                           <div
@@ -2789,7 +2799,8 @@ const TodayView = () => {
                                       </div>
                                     )}
                                   </div>
-                                )}
+                                  );
+                                }}
                               </Droppable>
                             </div>
                           </div>
