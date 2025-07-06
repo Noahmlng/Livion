@@ -1675,6 +1675,12 @@ const TodayView = () => {
   const handleCreateTask = async (timeSlot: TimeSlot) => {
     if (!newTaskText[timeSlot].trim()) return;
     
+    // 保存当前输入的文本
+    const title = newTaskText[timeSlot].trim();
+    
+    // 立即清空输入框，提供更好的用户体验
+    setNewTaskText({ ...newTaskText, [timeSlot]: '' });
+    
     // 系统时间日志
     const now = new Date(); 
     console.log('=== 系统时间日志 ===');
@@ -1682,9 +1688,6 @@ const TodayView = () => {
     console.log(`系统ISO时间: ${now.toISOString()}`);
     console.log(`系统日期部分: ${now.toISOString().split('T')[0]}`);
     console.log('=====================');
-    
-    // 创建新任务对象
-    const title = newTaskText[timeSlot].trim();
     
     // 直接构造日期字符串
     const year = now.getFullYear();
@@ -1704,33 +1707,36 @@ const TodayView = () => {
     };
     console.log(JSON.stringify(createData, null, 2));
     
-    const result = await createScheduleEntry(createData);
-    
-    if (result) {
-      // 创建新任务对象并添加到本地状态
-      const newTask: ScheduledTask = {
-        id: result.entry_id.toString(),
-        title: result.custom_name || title,
-        timeSlot: result.slot as TimeSlot,
-        sourceType: 'custom',
-        sourceId: undefined,
-        reward: result.reward_points,
-        completed: false
-      };
+    try {
+      const result = await createScheduleEntry(createData);
       
-      // 更新本地状态
-      setScheduledTasks(prev => [...prev, newTask]);
-      
-      // 更新临时排序状态，将新任务添加到末尾
-      const updatedOrder = {
-        ...temporaryTaskOrder,
-        [timeSlot]: [...temporaryTaskOrder[timeSlot], newTask.id]
-      };
-      setTemporaryTaskOrder(updatedOrder);
+      if (result) {
+        // 创建新任务对象并添加到本地状态
+        const newTask: ScheduledTask = {
+          id: result.entry_id.toString(),
+          title: result.custom_name || title,
+          timeSlot: result.slot as TimeSlot,
+          sourceType: 'custom',
+          sourceId: undefined,
+          reward: result.reward_points,
+          completed: false
+        };
+        
+        // 更新本地状态
+        setScheduledTasks(prev => [...prev, newTask]);
+        
+        // 更新临时排序状态，将新任务添加到末尾
+        const updatedOrder = {
+          ...temporaryTaskOrder,
+          [timeSlot]: [...temporaryTaskOrder[timeSlot], newTask.id]
+        };
+        setTemporaryTaskOrder(updatedOrder);
+      }
+    } catch (error) {
+      console.error('创建任务失败:', error);
+      // 如果创建失败，可以选择恢复输入框内容
+      // setNewTaskText({ ...newTaskText, [timeSlot]: title });
     }
-    
-    // 清空输入框
-    setNewTaskText({ ...newTaskText, [timeSlot]: '' });
     
     // 不再调用 loadTodayScheduleEntries()，避免重新排序
   };
