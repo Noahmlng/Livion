@@ -522,6 +522,7 @@ const TodayView = () => {
   const { isOpen: isNoteModalOpen, onOpen: onNoteModalOpen, onOpenChange: onNoteModalOpenChange } = useDisclosure();
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [modalNoteContent, setModalNoteContent] = useState('');
+  const [originalModalContent, setOriginalModalContent] = useState(''); // 保存原始内容用于比较
   const modalTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // 从数据库获取的任务模板
@@ -2348,6 +2349,7 @@ const TodayView = () => {
   const openNoteModal = (note: Note) => {
     setSelectedNote(note);
     setModalNoteContent(note.content);
+    setOriginalModalContent(note.content); // 保存原始内容
     onNoteModalOpen();
     
     // 聚焦到弹窗文本框
@@ -2361,11 +2363,101 @@ const TodayView = () => {
     }, 100);
   };
 
+  // 自动保存弹窗中的笔记内容（检查是否有变化）
+  const autoSaveModalNote = async () => {
+    if (!selectedNote || !modalNoteContent.trim()) return false;
+
+    // 检查内容是否有变化，避免不必要的保存
+    if (modalNoteContent.trim() === originalModalContent.trim()) {
+      console.log('[笔记自动保存] 内容无变化，跳过保存');
+      return true; // 内容无变化也算成功
+    }
+
+    try {
+      console.log('[笔记自动保存] 检测到内容变化，开始保存:', selectedNote.id);
+      
+      // 构建更新数据
+      const updateData = {
+        content: modalNoteContent.trim(),
+        updated_at: getCurrentDateTimeString()
+      };
+
+      // 调用数据库更新
+      const { error } = await supabase
+        .from('notes')
+        .update(updateData)
+        .eq('note_id', selectedNote.id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error auto-saving note:', error);
+        return false;
+      }
+
+      // 更新本地状态
+      setNotesState(prevNotes => 
+        prevNotes.map(note => 
+          note.id === selectedNote.id 
+            ? { ...note, content: modalNoteContent.trim(), updatedAt: updateData.updated_at }
+            : note
+        )
+      );
+
+      // 如果有搜索状态，也更新搜索结果
+      if (filteredNotes.length > 0) {
+        setFilteredNotes(prevFiltered => 
+          prevFiltered.map(note => 
+            note.id === selectedNote.id 
+              ? { ...note, content: modalNoteContent.trim(), updatedAt: updateData.updated_at }
+              : note
+          )
+        );
+      }
+
+      // 更新原始内容，避免重复保存
+      setOriginalModalContent(modalNoteContent.trim());
+      console.log('[笔记自动保存] 保存成功');
+      return true;
+
+    } catch (error) {
+      console.error('Error auto-saving modal note:', error);
+      return false;
+    }
+  };
+
+  // 关闭笔记弹窗（带自动保存）
+  const closeNoteModal = async () => {
+    // 先尝试自动保存
+    if (selectedNote && modalNoteContent.trim()) {
+      console.log('[弹窗关闭] 尝试自动保存笔记');
+      await autoSaveModalNote();
+    }
+
+    // 清理状态并关闭弹窗
+    setSelectedNote(null);
+    setModalNoteContent('');
+    setOriginalModalContent('');
+    onNoteModalOpenChange();
+  };
+
+  // 处理弹窗的开关状态变化（用于自动保存）
+  const handleNoteModalOpenChange = async (isOpen: boolean) => {
+    if (!isOpen) {
+      // 弹窗关闭时，执行自动保存
+      await closeNoteModal();
+    } else {
+      // 弹窗打开时，使用原有逻辑
+      onNoteModalOpenChange();
+    }
+  };
+
   // 保存弹窗中的笔记内容
   const saveModalNote = async () => {
     if (!selectedNote || !modalNoteContent.trim()) return;
 
     try {
+      console.log('[笔记手动保存] 开始更新笔记:', selectedNote.id);
+      
       // 构建更新数据
       const updateData = {
         content: modalNoteContent.trim(),
@@ -2404,10 +2496,11 @@ const TodayView = () => {
         );
       }
 
+      // 更新原始内容
+      setOriginalModalContent(modalNoteContent.trim());
+      
       // 关闭弹窗
-      onNoteModalOpenChange();
-      setSelectedNote(null);
-      setModalNoteContent('');
+      closeNoteModal();
 
     } catch (error) {
       console.error('Error saving modal note:', error);
@@ -2438,10 +2531,11 @@ const TodayView = () => {
         setFilteredNotes(prevFiltered => prevFiltered.filter(note => note.id !== selectedNote.id));
       }
 
-      // 关闭弹窗
-      onNoteModalOpenChange();
+      // 关闭弹窗（删除时不保存）
       setSelectedNote(null);
       setModalNoteContent('');
+      setOriginalModalContent('');
+      onNoteModalOpenChange();
 
     } catch (error) {
       console.error('Error deleting modal note:', error);
@@ -3415,7 +3509,7 @@ const TodayView = () => {
             {/* 笔记详细编辑弹窗 */}
       <Modal 
         isOpen={isNoteModalOpen} 
-        onOpenChange={onNoteModalOpenChange}
+        onOpenChange={handleNoteModalOpenChange}
         scrollBehavior="inside"
         size="2xl"
         classNames={{
@@ -3482,7 +3576,7 @@ const TodayView = () => {
                       saveModalNote();
                     } else if (e.key === 'Escape') {
                       e.preventDefault();
-                      onNoteModalOpenChange();
+                      closeNoteModal();
                     }
                   }}
                 />
