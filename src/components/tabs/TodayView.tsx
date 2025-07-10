@@ -542,44 +542,118 @@ const TodayView = () => {
     console.log('- onDragStart:', handleDragStart);
     console.log('- onDragEnd:', handleDragEnd);
     
+    // 强制重新渲染拖拽上下文
+    setForceUpdateKey(prev => prev + 1);
+    
     // 添加拖拽功能增强
-    // 这个函数用来确保所有draggable元素都能正常工作
     const enhanceDraggableElements = () => {
+      console.log('[拖拽修复] 开始增强拖拽元素');
+      
       // 查找所有拖拽相关元素
       const draggables = document.querySelectorAll('[data-rbd-draggable-id], [data-rbd-drag-handle-draggable-id]');
+      console.log(`[拖拽修复] 找到 ${draggables.length} 个拖拽元素`);
       
       // 确保它们可以被拖拽
-      draggables.forEach(el => {
+      draggables.forEach((el, index) => {
         if (el instanceof HTMLElement) {
           el.setAttribute('draggable', 'true');
           el.style.cursor = 'grab';
           
-          // 添加视觉反馈
-          el.addEventListener('mousedown', () => {
-            el.style.cursor = 'grabbing';
-          });
+          // 添加唯一标识符以便调试
+          el.setAttribute('data-drag-enhanced', 'true');
           
-          el.addEventListener('mouseup', () => {
+          // 添加视觉反馈
+          const handleMouseDown = () => {
+            console.log(`[拖拽修复] 鼠标按下，元素 ${index + 1}`);
+            el.style.cursor = 'grabbing';
+          };
+          
+          const handleMouseUp = () => {
+            console.log(`[拖拽修复] 鼠标释放，元素 ${index + 1}`);
             el.style.cursor = 'grab';
+          };
+          
+          // 移除旧的事件监听器（如果存在）
+          el.removeEventListener('mousedown', handleMouseDown);
+          el.removeEventListener('mouseup', handleMouseUp);
+          
+          // 添加新的事件监听器
+          el.addEventListener('mousedown', handleMouseDown);
+          el.addEventListener('mouseup', handleMouseUp);
+        }
+      });
+      
+      console.log('[拖拽修复] 拖拽元素增强完成');
+    };
+    
+    // 初始化后执行增强，并延迟执行以确保 DOM 完全渲染
+    const initializeEnhancement = () => {
+      enhanceDraggableElements();
+      
+      // 再次延迟执行，确保所有动态内容都已渲染
+      setTimeout(() => {
+        enhanceDraggableElements();
+        console.log('[拖拽修复] 延迟增强完成');
+      }, 500);
+    };
+    
+    setTimeout(initializeEnhancement, 100);
+    
+    // 改进的 MutationObserver - 只在必要时触发
+    let enhancementTimeout: NodeJS.Timeout;
+    const debouncedEnhancement = () => {
+      clearTimeout(enhancementTimeout);
+      enhancementTimeout = setTimeout(() => {
+        console.log('[拖拽修复] MutationObserver 触发增强');
+        enhanceDraggableElements();
+      }, 300); // 300ms 防抖
+    };
+    
+    const observer = new MutationObserver((mutations) => {
+      let shouldEnhance = false;
+      
+      mutations.forEach((mutation) => {
+        // 只有当添加了拖拽相关元素时才触发增强
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node instanceof HTMLElement) {
+              const hasDragElements = node.querySelector('[data-rbd-draggable-id], [data-rbd-drag-handle-draggable-id]') ||
+                                    node.hasAttribute('data-rbd-draggable-id') ||
+                                    node.hasAttribute('data-rbd-drag-handle-draggable-id');
+              
+              if (hasDragElements) {
+                console.log('[拖拽修复] 检测到新的拖拽元素被添加');
+                shouldEnhance = true;
+              }
+            }
           });
         }
       });
-    };
+      
+      if (shouldEnhance) {
+        debouncedEnhancement();
+      }
+    });
     
-    // 初始化后执行一次增强
-    setTimeout(enhanceDraggableElements, 1000);
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true,
+      attributes: false // 不监听属性变化，减少触发频率
+    });
     
-    // 选择性阻止原生拖拽: 只阻止非draggable元素的拖拽
+    // 选择性阻止原生拖拽
     const preventNativeDrag = (e: DragEvent) => {
-      // 检查目标元素是否是可拖拽元素或者其内部元素
       const target = e.target as HTMLElement;
+      
+      // 检查是否是拖拽相关元素
       if (
         target.hasAttribute('draggable') || 
         target.closest('[draggable="true"]') || 
         target.closest('[data-rbd-draggable-id]') || 
         target.closest('[data-rbd-drag-handle-draggable-id]')
       ) {
-        // 如果是可拖拽元素，允许拖拽
+        // 如果是拖拽元素，允许拖拽
+        console.log('[拖拽修复] 允许拖拽元素的原生拖拽');
         return true;
       }
       
@@ -588,12 +662,8 @@ const TodayView = () => {
       return false;
     };
     
-    // 添加全局拖拽事件监听器 - 只阻止非draggable元素的拖拽
+    // 添加全局拖拽事件监听器
     document.addEventListener('dragstart', preventNativeDrag);
-    
-    // 每当有DOM变化时，重新检查并增强
-    const observer = new MutationObserver(enhanceDraggableElements);
-    observer.observe(document.body, { childList: true, subtree: true });
     
     // Load today's schedule entries
     loadTodayScheduleEntries();
@@ -612,10 +682,25 @@ const TodayView = () => {
     
     // Clean up event listeners
     return () => {
+      console.log('[拖拽修复] 清理事件监听器和观察者');
+      
+      // 清理超时
+      clearTimeout(enhancementTimeout);
+      
       // 清理observer
       observer.disconnect();
+      
       // 移除全局拖拽事件监听器
       document.removeEventListener('dragstart', preventNativeDrag);
+      
+      // 清理所有增强的拖拽元素
+      const enhancedElements = document.querySelectorAll('[data-drag-enhanced="true"]');
+      enhancedElements.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.removeAttribute('data-drag-enhanced');
+          el.style.cursor = '';
+        }
+      });
     };
   }, []);
   
@@ -1212,6 +1297,12 @@ const TodayView = () => {
         });
         
         console.log('[笔记创建] 笔记创建完成，使用乐观更新');
+        
+        // 强制刷新拖拽上下文（如果页面有拖拽元素）
+        setTimeout(() => {
+          forceRefreshDragContext();
+        }, 100);
+        
         // 创建成功，无需重新加载，乐观更新已经处理了排序
       } else {
         console.error('[笔记创建] 创建失败，服务器返回空结果');
@@ -1593,6 +1684,11 @@ const TodayView = () => {
       status: newCompletedState ? 'completed' : 'ongoing' 
     });
     
+    // 强制刷新拖拽上下文
+    setTimeout(() => {
+      forceRefreshDragContext();
+    }, 50);
+    
     // 不再调用 loadTodayScheduleEntries()，避免重新排序
   };
   
@@ -1654,6 +1750,11 @@ const TodayView = () => {
     // 清除编辑状态
     setEditingTaskId(null);
     setEditingText('');
+    
+    // 强制刷新拖拽上下文
+    setTimeout(() => {
+      forceRefreshDragContext();
+    }, 50);
     // 确认：不调用 loadTodayScheduleEntries()，避免重新排序
   };
 
@@ -1732,6 +1833,11 @@ const TodayView = () => {
           [timeSlot]: [...temporaryTaskOrder[timeSlot], newTask.id]
         };
         setTemporaryTaskOrder(updatedOrder);
+        
+        // 强制刷新拖拽上下文
+        setTimeout(() => {
+          forceRefreshDragContext();
+        }, 100);
       }
     } catch (error) {
       console.error('创建任务失败:', error);
@@ -1761,6 +1867,11 @@ const TodayView = () => {
     
     // 然后从数据库中删除
     await deleteScheduleEntry(taskId);
+    
+    // 强制刷新拖拽上下文
+    setTimeout(() => {
+      forceRefreshDragContext();
+    }, 100);
     
     // 不再调用 loadTodayScheduleEntries()，避免重新排序
   };
@@ -2288,6 +2399,11 @@ const TodayView = () => {
         // 更新临时排序状态
         setTemporaryTaskOrder(newOrder);
         
+        // 强制刷新拖拽上下文以确保拖拽功能继续工作
+        setTimeout(() => {
+          forceRefreshDragContext();
+        }, 200);
+        
       } catch (error) {
         console.error('Error moving task:', error);
       }
@@ -2331,6 +2447,43 @@ const TodayView = () => {
         console.error('创建测试笔记失败:', error);
       });
   };
+
+  // 将调试函数暴露到全局，方便在控制台调用
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugDragAndDrop = () => {
+        console.log('=== 拖拽功能调试 ===');
+        
+        // 检查拖拽元素
+        const draggables = document.querySelectorAll('[data-rbd-draggable-id]');
+        console.log(`发现 ${draggables.length} 个拖拽元素`);
+        
+        // 检查每个拖拽元素的状态
+        draggables.forEach((el, index) => {
+          if (el instanceof HTMLElement) {
+            console.log(`拖拽元素 ${index + 1}:`, {
+              id: el.getAttribute('data-rbd-draggable-id'),
+              draggable: el.getAttribute('draggable'),
+              cursor: el.style.cursor,
+              enhanced: el.getAttribute('data-drag-enhanced')
+            });
+          }
+        });
+        
+        // 强制刷新拖拽上下文
+        console.log('强制刷新拖拽上下文...');
+        forceRefreshDragContext();
+        
+        // 延迟再次检查
+        setTimeout(() => {
+          const updatedDraggables = document.querySelectorAll('[data-rbd-draggable-id]');
+          console.log(`刷新后发现 ${updatedDraggables.length} 个拖拽元素`);
+          console.log('=== 调试完成 ===');
+        }, 500);
+      };
+      (window as any).forceRefreshDragContext = forceRefreshDragContext;
+    }
+  }, []);
 
   // 开始编辑笔记
   const startEditingNote = (note: Note) => {
@@ -2727,11 +2880,37 @@ const TodayView = () => {
     }
   }, [editingNoteId, editingNoteContent]);
 
-  return (
-    <DragDropContext 
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
+  // 新增：强制重新渲染拖拽上下文的方法
+  const forceRefreshDragContext = () => {
+    console.log('[拖拽修复] 强制刷新拖拽上下文');
+    
+    // 重置服务器上下文
+    resetServerContext();
+    
+    // 强制重新渲染
+    setForceUpdateKey(prev => prev + 1);
+    
+    // 延迟重新增强拖拽元素
+    setTimeout(() => {
+      const draggables = document.querySelectorAll('[data-rbd-draggable-id], [data-rbd-drag-handle-draggable-id]');
+      console.log(`[拖拽修复] 重新增强 ${draggables.length} 个拖拽元素`);
+      
+      draggables.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.setAttribute('draggable', 'true');
+          el.style.cursor = 'grab';
+          el.setAttribute('data-drag-enhanced', 'true');
+        }
+      });
+    }, 100);
+  };
+
+      return (
+      <DragDropContext 
+        key={forceUpdateKey}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
       <div 
         className="flex flex-col gap-6 pb-40 hide-scrollbar"
       >
