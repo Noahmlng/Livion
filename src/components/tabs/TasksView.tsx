@@ -298,8 +298,10 @@ const TasksView = () => {
   }, [editingDescription]);
   
   // Helper function to update the task and refresh the data
-  const handleTaskUpdate = async (taskId: string, data: Partial<Task>) => {
-    setIsUpdating(true);
+  const handleTaskUpdate = async (taskId: string, data: Partial<Task>, showLoading: boolean = true) => {
+    if (showLoading) {
+      setIsUpdating(true);
+    }
     try {
       await updateTask(taskId, data);
       // Immediately reload tasks to reflect changes
@@ -307,7 +309,9 @@ const TasksView = () => {
     } catch (error) {
       console.error('Error updating task:', error);
     } finally {
-      setIsUpdating(false);
+      if (showLoading) {
+        setIsUpdating(false);
+      }
     }
   };
   
@@ -328,7 +332,7 @@ const TasksView = () => {
   
   const saveDescription = async () => {
     if (!selectedTask) return;
-    await handleTaskUpdate(selectedTask.task_id.toString(), { description: editingValues.description });
+    await handleTaskUpdate(selectedTask.task_id.toString(), { description: editingValues.description }, false);
     // Keep editing state active for continuous editing
   };
   
@@ -715,7 +719,7 @@ const TasksView = () => {
                         }
                         autoSaveTimeoutRef.current = setTimeout(() => {
                           if (selectedTask) {
-                            handleTaskUpdate(selectedTask.task_id.toString(), { description: value });
+                            handleTaskUpdate(selectedTask.task_id.toString(), { description: value }, false);
                           }
                         }, 1000);
                       }}
