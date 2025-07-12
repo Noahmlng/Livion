@@ -13,7 +13,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState(['', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, refreshAuthState } = useAuth();
+  const { login } = useAuth();
   const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null, null]);
 
   const handleInputChange = (index: number, value: string) => {

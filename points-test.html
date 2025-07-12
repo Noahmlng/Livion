@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>积分系统 LLM 服务测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen py-8">
+    <div class="max-w-6xl mx-auto px-4">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">积分系统 LLM 服务测试</h1>
+            <p class="text-gray-600 mb-6">测试不同免费 LLM 服务的积分计算效果</p>
+            
+            <!-- 配置状态 -->
+            <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h3 class="font-semibold text-blue-800 mb-2">配置状态</h3>
+                <div id="configStatus" class="space-y-1 text-sm">
+                    <div class="text-gray-600">正在检查配置...</div>
+                </div>
+            </div>
+            
+            <!-- 任务选择 -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">选择测试任务：</label>
+                <select id="taskSelect" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="0">任务 1: Livion v2.1 积分系统设计</option>
+                    <option value="1">任务 2: PMF 验证用例研究</option>
+                    <option value="2">任务 3: 对话助手 KOL 搜索功能</option>
+                </select>
+            </div>
+            
+            <!-- 当前任务详情 -->
+            <div id="taskDetails" class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h3 class="font-semibold text-gray-800 mb-2">当前任务详情</h3>
+                <div id="taskInfo" class="space-y-2 text-sm">
+                    <!-- 任务详情会在这里显示 -->
+                </div>
+            </div>
+            
+            <!-- 操作按钮 -->
+            <div class="flex gap-4 mb-6">
+                <button id="testSingleBtn" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium">
+                    测试最佳服务商
+                </button>
+                <button id="testAllBtn" class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium">
+                    对比所有服务商
+                </button>
+                <button id="clearBtn" class="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors font-medium">
+                    清除结果
+                </button>
+            </div>
+            
+            <!-- 加载状态 -->
+            <div id="loadingIndicator" class="hidden text-center py-8">
+                <div class="loading-spinner mx-auto"></div>
+                <p class="mt-2 text-gray-600">正在计算积分...</p>
+            </div>
+            
+            <!-- 结果展示 -->
+            <div id="resultsContainer" class="space-y-4 hidden">
+                <h3 class="text-lg font-semibold text-gray-800">测试结果：</h3>
+                <div id="results" class="space-y-4">
+                    <!-- 结果会在这里显示 -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- 使用说明 -->
+        <div class="bg-blue-50 rounded-lg p-6 mb-6">
+            <h3 class="text-lg font-semibold text-blue-800 mb-3">如何获取免费 API 密钥：</h3>
+            <div class="space-y-4 text-sm">
+                <div class="border border-blue-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-blue-700 mb-2">1. Google AI Studio (Gemini) - 推荐 ⭐</h4>
+                    <p class="text-gray-700 mb-2">访问 <a href="https://aistudio.google.com/apikey" class="text-blue-600 underline" target="_blank">https://aistudio.google.com/apikey</a></p>
+                    <div class="text-gray-600">
+                        <p>• 每天 300K tokens 免费</p>
+                        <p>• 无需信用卡</p>
+                        <p>• 质量高，响应快</p>
+                    </div>
+                </div>
+                
+                <div class="border border-blue-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-blue-700 mb-2">2. Groq - 速度最快 ⚡</h4>
+                    <p class="text-gray-700 mb-2">访问 <a href="https://console.groq.com/" class="text-blue-600 underline" target="_blank">https://console.groq.com/</a></p>
+                    <div class="text-gray-600">
+                        <p>• 每天 14,400 次请求免费</p>
+                        <p>• 极快的推理速度</p>
+                        <p>• 支持 Llama 3.1 等模型</p>
+                    </div>
+                </div>
+                
+                <div class="border border-blue-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-blue-700 mb-2">3. DeepSeek - 成本极低 💰</h4>
+                    <p class="text-gray-700 mb-2">访问 <a href="https://platform.deepseek.com/" class="text-blue-600 underline" target="_blank">https://platform.deepseek.com/</a></p>
+                    <div class="text-gray-600">
+                        <p>• $0.14/1M 输入 tokens, $0.28/1M 输出 tokens</p>
+                        <p>• 几乎免费使用</p>
+                        <p>• 中文友好</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 配置说明 -->
+        <div class="bg-yellow-50 rounded-lg p-6 border border-yellow-200">
+            <h3 class="text-lg font-semibold text-yellow-800 mb-3">配置说明：</h3>
+            <div class="space-y-2 text-sm text-yellow-700">
+                <p><strong>注意：</strong> 这个演示页面需要在实际项目中运行，因为需要访问环境变量。</p>
+                <p><strong>配置方法：</strong> 在项目根目录创建 <code class="bg-white px-2 py-1 rounded">.env.local</code> 文件，添加你的 API 密钥。</p>
+                <p><strong>安全提醒：</strong> 不要将 API 密钥提交到版本控制系统中。</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 测试任务数据
+        const testTasks = [
+            {
+                title: "Livion v2.1 —— 积分系统（尤其是日常任务、Challenges和任务全部完成给到的激励，动画要 hackee，积分要和我的奖励预算挂钩）",
+                description: "完整的积分系统设计与实现",
+                notes: "需要考虑用户激励机制、动画效果、预算控制等多个方面",
+                type: "challenge"
+            },
+            {
+                title: "到底我们还要找什么样的 Usecase 去进一步验证 PMF，有哪些画像和 Usecase 是我们希望接触到的，要给到楚航这个目标来引进",
+                description: "产品市场匹配验证的用例研究",
+                notes: "需要分析目标用户画像，制定接触策略，协调团队资源",
+                type: "challenge"
+            },
+            {
+                title: "针对 对话助手做KOL search 这个case，起底了解应该给数据、怎么给know-how、泛化性",
+                description: "https://chatgpt.com/c/6870fa0d-37f4-800c-8e25-3042fcbeed1e",
+                notes: `包括未来怎么获取呢？
+
+找哲宁推荐一些东西看，怎么对这块有感觉
+先问下 GPT，让哲宁和博哥帮我过一遍 list 也行
+
+别忘了实操带来的手感
+
+甚至我可以做个小 Benchmark 来对比这个对话助手的效果？
+
+明天去公司继续干，我喜欢沉浸在问题里，周末我没有必要很强烈的感知，it's a normal day, but I got more blocks of time.`,
+                type: "challenge"
+            }
+        ];
+        
+        // DOM 元素
+        const taskSelect = document.getElementById('taskSelect');
+        const taskInfo = document.getElementById('taskInfo');
+        const testSingleBtn = document.getElementById('testSingleBtn');
+        const testAllBtn = document.getElementById('testAllBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const results = document.getElementById('results');
+        const configStatus = document.getElementById('configStatus');
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            updateTaskDetails();
+            checkConfiguration();
+        });
+        
+        // 更新任务详情
+        function updateTaskDetails() {
+            const selectedIndex = parseInt(taskSelect.value);
+            const task = testTasks[selectedIndex];
+            
+            taskInfo.innerHTML = `
+                <div class="mb-2">
+                    <span class="font-medium text-gray-700">标题：</span>
+                    <span class="text-gray-900">${task.title}</span>
+                </div>
+                <div class="mb-2">
+                    <span class="font-medium text-gray-700">描述：</span>
+                    <span class="text-gray-900">${task.description}</span>
+                </div>
+                <div class="mb-2">
+                    <span class="font-medium text-gray-700">笔记：</span>
+                    <pre class="text-gray-900 whitespace-pre-wrap text-sm mt-1 bg-white p-2 rounded border">${task.notes}</pre>
+                </div>
+            `;
+        }
+        
+        // 检查配置状态
+        function checkConfiguration() {
+            const hasGemini = !!process.env.VITE_GOOGLE_AI_API_KEY;
+            const hasGroq = !!process.env.VITE_GROQ_API_KEY;
+            const hasDeepSeek = !!process.env.VITE_DEEPSEEK_API_KEY;
+            
+            let statusHtml = '';
+            
+            if (hasGemini) {
+                statusHtml += '<div class="text-green-600">✓ Google Gemini API 已配置</div>';
+            } else {
+                statusHtml += '<div class="text-red-600">✗ Google Gemini API 未配置</div>';
+            }
+            
+            if (hasGroq) {
+                statusHtml += '<div class="text-green-600">✓ Groq API 已配置</div>';
+            } else {
+                statusHtml += '<div class="text-red-600">✗ Groq API 未配置</div>';
+            }
+            
+            if (hasDeepSeek) {
+                statusHtml += '<div class="text-green-600">✓ DeepSeek API 已配置</div>';
+            } else {
+                statusHtml += '<div class="text-red-600">✗ DeepSeek API 未配置</div>';
+            }
+            
+            const totalConfigured = [hasGemini, hasGroq, hasDeepSeek].filter(Boolean).length;
+            
+            if (totalConfigured === 0) {
+                statusHtml += '<div class="text-orange-600 mt-2">⚠️ 没有配置任何 API 密钥，请先配置后再进行测试</div>';
+                testSingleBtn.disabled = true;
+                testAllBtn.disabled = true;
+            } else {
+                statusHtml += `<div class="text-blue-600 mt-2">✓ 已配置 ${totalConfigured} 个服务商</div>`;
+            }
+            
+            configStatus.innerHTML = statusHtml;
+        }
+        
+        // 模拟测试结果（实际项目中会调用真实 API）
+        function simulateTestResult(provider, task) {
+            const difficulty = ['easy', 'medium', 'hard', 'extreme'][Math.floor(Math.random() * 4)];
+            const quality = ['basic', 'good', 'excellent'][Math.floor(Math.random() * 3)];
+            const points = Math.floor(Math.random() * 200) + 50;
+            
+            const reasonings = [
+                "这个任务涉及系统设计和用户体验优化，需要综合考虑技术实现和用户激励机制，工作量较大，给予高分奖励。",
+                "任务具有一定的挑战性，需要进行市场分析和用户画像研究，体现了战略思考能力，给予中等偏上的积分。",
+                "这是一个探索性的研究任务，需要深入了解技术细节和实际应用场景，展现了学习和实践的积极态度。"
+            ];
+            
+            return {
+                provider: provider,
+                points: points,
+                difficulty: difficulty,
+                quality: quality,
+                reasoning: reasonings[Math.floor(Math.random() * reasonings.length)],
+                responseTime: Math.floor(Math.random() * 3000) + 500
+            };
+        }
+        
+        // 显示测试结果
+        function displayResults(testResults) {
+            results.innerHTML = '';
+            
+            testResults.forEach(result => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'border rounded-lg p-4 bg-gray-50';
+                
+                if (result.error) {
+                    resultDiv.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-semibold text-lg text-gray-800">${result.provider}</h4>
+                        </div>
+                        <div class="text-red-600 bg-red-50 p-3 rounded">
+                            <strong>错误：</strong> ${result.error}
+                        </div>
+                    `;
+                } else {
+                    const difficultyColor = {
+                        easy: 'bg-green-100 text-green-800',
+                        medium: 'bg-yellow-100 text-yellow-800',
+                        hard: 'bg-orange-100 text-orange-800',
+                        extreme: 'bg-red-100 text-red-800'
+                    };
+                    
+                    const qualityColor = {
+                        basic: 'bg-gray-100 text-gray-800',
+                        good: 'bg-blue-100 text-blue-800',
+                        excellent: 'bg-purple-100 text-purple-800'
+                    };
+                    
+                    resultDiv.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-semibold text-lg text-gray-800">${result.provider}</h4>
+                            <span class="text-sm text-gray-500">${result.responseTime}ms</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-4">
+                                <span class="text-2xl font-bold text-green-600">+${result.points} 积分</span>
+                                <span class="px-2 py-1 ${difficultyColor[result.difficulty]} text-sm rounded">
+                                    ${result.difficulty}
+                                </span>
+                                <span class="px-2 py-1 ${qualityColor[result.quality]} text-sm rounded">
+                                    ${result.quality}
+                                </span>
+                            </div>
+                            <div class="bg-white p-3 rounded border-l-4 border-blue-500">
+                                <p class="text-gray-700">${result.reasoning}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                results.appendChild(resultDiv);
+            });
+            
+            resultsContainer.classList.remove('hidden');
+        }
+        
+        // 事件监听器
+        taskSelect.addEventListener('change', updateTaskDetails);
+        
+        testSingleBtn.addEventListener('click', () => {
+            const selectedTask = testTasks[parseInt(taskSelect.value)];
+            
+            // 显示加载状态
+            loadingIndicator.classList.remove('hidden');
+            resultsContainer.classList.add('hidden');
+            testSingleBtn.disabled = true;
+            testAllBtn.disabled = true;
+            
+            // 模拟 API 调用
+            setTimeout(() => {
+                const result = simulateTestResult('Google Gemini', selectedTask);
+                displayResults([result]);
+                
+                // 隐藏加载状态
+                loadingIndicator.classList.add('hidden');
+                testSingleBtn.disabled = false;
+                testAllBtn.disabled = false;
+            }, 2000);
+        });
+        
+        testAllBtn.addEventListener('click', () => {
+            const selectedTask = testTasks[parseInt(taskSelect.value)];
+            
+            // 显示加载状态
+            loadingIndicator.classList.remove('hidden');
+            resultsContainer.classList.add('hidden');
+            testSingleBtn.disabled = true;
+            testAllBtn.disabled = true;
+            
+            // 模拟 API 调用
+            setTimeout(() => {
+                const results = [
+                    simulateTestResult('Google Gemini', selectedTask),
+                    simulateTestResult('Groq', selectedTask),
+                    simulateTestResult('DeepSeek', selectedTask)
+                ];
+                
+                displayResults(results);
+                
+                // 隐藏加载状态
+                loadingIndicator.classList.add('hidden');
+                testSingleBtn.disabled = false;
+                testAllBtn.disabled = false;
+            }, 3000);
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            resultsContainer.classList.add('hidden');
+            results.innerHTML = '';
+        });
+    </script>
+</body>
+</html> 

@@ -1,12 +1,12 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { BaseRepository } from './base';
-import { ITemplateRepository, TaskTemplate } from './interfaces';
+import { IBehaviourRepository, Behaviour } from './interfaces';
 
 /**
- * Template Repository实现
+ * Behaviour Repository实现 (formerly Template)
  */
-export class TemplateRepository extends BaseRepository<TaskTemplate> implements ITemplateRepository {
+export class BehaviourRepository extends BaseRepository<Behaviour> implements IBehaviourRepository {
   constructor(supabase: SupabaseClient) {
-    super(supabase, 'task_templates', 'template_id', 'user_id');
+    super(supabase, 'behaviour', 'template_id', 'user_id');
   }
 } 

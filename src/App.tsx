@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HeroUIProvider } from '@heroui/react';
 import TodayView from './components/tabs/TodayView';
 import TasksView from './components/tabs/TasksView';
+// import PointsTestPage from './components/PointsTestPage';
 import AppHeader from './components/layout/AppHeader';
 import { ValhallaTaskProvider } from './context/ValhallaTaskContext';
 import { DbProvider } from './context/DbContext';
@@ -15,12 +16,12 @@ import './components/tabs/hideScrollbar.css';
 const TABS = [
   { id: 'today', label: '今天', icon: '📅', component: TodayView },
   { id: 'tasks', label: '支线任务', icon: '⚔️', component: TasksView },
+  // { id: 'points-test', label: '积分测试', icon: '🧪', component: PointsTestPage },
 ];
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('today');
-  const { user, loading, signOut, refreshAuthState } = useAuth();
-  const [forceRender, setForceRender] = useState(0);
+  const { user, loading, refreshAuthState } = useAuth();
   const [showLogin, setShowLogin] = useState(true); // 默认显示登录界面
   
   // 检测用户状态并决定是否显示登录页面
@@ -44,9 +45,6 @@ function MainApp() {
       
       // 强制不显示登录页面
       setShowLogin(false);
-      
-      // 触发重新渲染
-      setForceRender(prev => prev + 1);
     } catch (err) {
       console.error('Error during login success handling:', err);
     }

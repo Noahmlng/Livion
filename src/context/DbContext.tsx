@@ -1,25 +1,23 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { ScheduleEntry, Task, Note, TaskTemplate } from '../repositories/interfaces';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Note, Challenge, Task, Behaviour } from '../repositories/interfaces';
 import { useAuth } from './AuthContext';
 import { getServiceFactory } from '../config/di';
-import { ITaskService, INoteService, IScheduleService, ITemplateService } from '../services/interfaces';
-import { logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandling';
 
 interface DbContextType {
   userId: string | null;
-  // Tasks
-  tasks: Task[];
+  // Tasks (Challenges)
+  tasks: Challenge[];
   loadTasks: (goalId?: string) => Promise<void>;
-  createTask: (data: Omit<Task, 'task_id' | 'created_at' | 'user_id'>) => Promise<Task | null>;
-  updateTask: (taskId: string, data: Partial<Task>) => Promise<boolean>;
+  createTask: (data: Omit<Challenge, 'task_id' | 'created_at' | 'user_id'>) => Promise<Challenge | null>;
+  updateTask: (taskId: string, data: Partial<Challenge>) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   // Schedule entries
-  scheduleEntries: ScheduleEntry[];
+  scheduleEntries: Task[];
   loadScheduleEntries: (date?: Date) => Promise<void>;
-  loadScheduleEntriesRange: (startDate: Date, endDate: Date) => Promise<Record<string, ScheduleEntry[]>>;
-  createScheduleEntry: (data: any) => Promise<ScheduleEntry | null>;
-  updateScheduleEntry: (entryId: string, data: Partial<ScheduleEntry>) => Promise<boolean>;
+  loadScheduleEntriesRange: (startDate: Date, endDate: Date) => Promise<Record<string, Task[]>>;
+  createScheduleEntry: (data: Omit<Task, 'entry_id' | 'created_at' | 'user_id'>) => Promise<Task | null>;
+  updateScheduleEntry: (entryId: string, data: Partial<Task>) => Promise<boolean>;
   deleteScheduleEntry: (entryId: string) => Promise<boolean>;
   // Notes
   notes: Note[];
@@ -29,11 +27,11 @@ interface DbContextType {
   updateNote: (noteId: string, content: string, skipRefresh?: boolean) => Promise<boolean>;
   deleteNote: (noteId: string, skipRefresh?: boolean) => Promise<boolean>;
   toggleNotePin: (noteId: string, pinned: boolean, skipRefresh?: boolean) => Promise<boolean>;
-  // Templates
-  templates: TaskTemplate[];
+  // Templates (Behaviours)
+  templates: Behaviour[];
   loadTemplates: () => Promise<void>;
-  createTemplate: (data: Omit<TaskTemplate, 'template_id' | 'created_at' | 'user_id'>) => Promise<TaskTemplate | null>;
-  updateTemplate: (templateId: string, data: Partial<TaskTemplate>) => Promise<boolean>;
+  createTemplate: (data: Omit<Behaviour, 'template_id' | 'created_at' | 'user_id'>) => Promise<Behaviour | null>;
+  updateTemplate: (templateId: string, data: Partial<Behaviour>) => Promise<boolean>;
   deleteTemplate: (templateId: string) => Promise<boolean>;
   // Loading state
   loading: boolean;
@@ -45,10 +43,10 @@ export function DbProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.user_id ? user.user_id.toString() : null;
   
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
+  const [tasks, setTasks] = useState<Challenge[]>([]);
+  const [scheduleEntries, setScheduleEntries] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [templates, setTemplates] = useState<Behaviour[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
   // Get services from DI container
@@ -126,7 +124,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
       setNotes([]);
       setTemplates([]);
     }
-  }, [userId]);
+  }, [userId, taskService, scheduleService, noteService, templateService]);
 
   // Task functions
   const loadTasks = async (goalId?: string) => {
@@ -145,7 +143,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createTask = async (data: Omit<Task, 'task_id' | 'created_at' | 'user_id'>) => {
+  const createTask = async (data: Omit<Challenge, 'task_id' | 'created_at' | 'user_id'>) => {
     if (!userId) return null;
     
     setLoading(true);
@@ -161,7 +159,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateTask = async (taskId: string, data: Partial<Task>) => {
+  const updateTask = async (taskId: string, data: Partial<Challenge>) => {
     if (!userId) return false;
     
     setLoading(true);
@@ -208,7 +206,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadScheduleEntriesRange = async (startDate: Date, endDate: Date): Promise<Record<string, ScheduleEntry[]>> => {
+  const loadScheduleEntriesRange = async (startDate: Date, endDate: Date): Promise<Record<string, Task[]>> => {
     if (!userId) return {};
     
     setLoading(true);
@@ -223,7 +221,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createScheduleEntry = async (data: any) => {
+  const createScheduleEntry = async (data: Omit<Task, 'entry_id' | 'created_at' | 'user_id'>) => {
     if (!userId) return null;
     
     setLoading(true);
@@ -239,7 +237,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateScheduleEntry = async (entryId: string, data: Partial<ScheduleEntry>) => {
+  const updateScheduleEntry = async (entryId: string, data: Partial<Task>) => {
     if (!userId) return false;
     
     setLoading(true);
@@ -389,7 +387,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createTemplate = async (data: Omit<TaskTemplate, 'template_id' | 'created_at' | 'user_id'>) => {
+  const createTemplate = async (data: Omit<Behaviour, 'template_id' | 'created_at' | 'user_id'>) => {
     if (!userId) return null;
     
     setLoading(true);
@@ -405,7 +403,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateTemplate = async (templateId: string, data: Partial<TaskTemplate>) => {
+  const updateTemplate = async (templateId: string, data: Partial<Behaviour>) => {
     if (!userId) return false;
     
     setLoading(true);

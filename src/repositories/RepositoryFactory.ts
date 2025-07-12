@@ -2,17 +2,17 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { 
   IUserRepository, 
   ITaskRepository, 
-  IScheduleRepository, 
+  IChallengeRepository, 
   INoteRepository, 
-  IGoalRepository, 
-  ITemplateRepository 
+  IUserGoalRepository, 
+  IBehaviourRepository 
 } from './interfaces';
 import { UserRepository } from './UserRepository';
-import { TaskRepository } from './TaskRepository';
-import { ScheduleRepository } from './ScheduleRepository';
+import { TaskRepository } from './ScheduleRepository';
+import { ChallengeRepository } from './TaskRepository';
 import { NoteRepository } from './NoteRepository';
-import { GoalRepository } from './GoalRepository';
-import { TemplateRepository } from './TemplateRepository';
+import { UserGoalRepository } from './GoalRepository';
+import { BehaviourRepository } from './TemplateRepository';
 
 /**
  * Repository工厂类
@@ -24,10 +24,10 @@ export class RepositoryFactory {
   // Repository实例缓存
   private userRepository?: IUserRepository;
   private taskRepository?: ITaskRepository;
-  private scheduleRepository?: IScheduleRepository;
+  private challengeRepository?: IChallengeRepository;
   private noteRepository?: INoteRepository;
-  private goalRepository?: IGoalRepository;
-  private templateRepository?: ITemplateRepository;
+  private userGoalRepository?: IUserGoalRepository;
+  private behaviourRepository?: IBehaviourRepository;
 
   constructor(supabase: SupabaseClient) {
     this.supabase = supabase;
@@ -54,13 +54,13 @@ export class RepositoryFactory {
   }
 
   /**
-   * 获取日程Repository
+   * 获取挑战Repository
    */
-  getScheduleRepository(): IScheduleRepository {
-    if (!this.scheduleRepository) {
-      this.scheduleRepository = new ScheduleRepository(this.supabase);
+  getChallengeRepository(): IChallengeRepository {
+    if (!this.challengeRepository) {
+      this.challengeRepository = new ChallengeRepository(this.supabase);
     }
-    return this.scheduleRepository;
+    return this.challengeRepository;
   }
 
   /**
@@ -74,23 +74,23 @@ export class RepositoryFactory {
   }
 
   /**
-   * 获取目标Repository
+   * 获取用户目标Repository
    */
-  getGoalRepository(): IGoalRepository {
-    if (!this.goalRepository) {
-      this.goalRepository = new GoalRepository(this.supabase);
+  getUserGoalRepository(): IUserGoalRepository {
+    if (!this.userGoalRepository) {
+      this.userGoalRepository = new UserGoalRepository(this.supabase);
     }
-    return this.goalRepository;
+    return this.userGoalRepository;
   }
 
   /**
-   * 获取模板Repository
+   * 获取行为Repository
    */
-  getTemplateRepository(): ITemplateRepository {
-    if (!this.templateRepository) {
-      this.templateRepository = new TemplateRepository(this.supabase);
+  getBehaviourRepository(): IBehaviourRepository {
+    if (!this.behaviourRepository) {
+      this.behaviourRepository = new BehaviourRepository(this.supabase);
     }
-    return this.templateRepository;
+    return this.behaviourRepository;
   }
 }
 
@@ -145,10 +145,10 @@ export class DIContainer {
   }
 
   /**
-   * 便捷方法：获取日程Repository
+   * 便捷方法：获取挑战Repository
    */
-  getScheduleRepository(): IScheduleRepository {
-    return this.getRepositoryFactory().getScheduleRepository();
+  getChallengeRepository(): IChallengeRepository {
+    return this.getRepositoryFactory().getChallengeRepository();
   }
 
   /**
@@ -159,16 +159,16 @@ export class DIContainer {
   }
 
   /**
-   * 便捷方法：获取目标Repository
+   * 便捷方法：获取用户目标Repository
    */
-  getGoalRepository(): IGoalRepository {
-    return this.getRepositoryFactory().getGoalRepository();
+  getUserGoalRepository(): IUserGoalRepository {
+    return this.getRepositoryFactory().getUserGoalRepository();
   }
 
   /**
-   * 便捷方法：获取模板Repository
+   * 便捷方法：获取行为Repository
    */
-  getTemplateRepository(): ITemplateRepository {
-    return this.getRepositoryFactory().getTemplateRepository();
+  getBehaviourRepository(): IBehaviourRepository {
+    return this.getRepositoryFactory().getBehaviourRepository();
   }
 } 

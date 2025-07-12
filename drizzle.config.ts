@@ -1,11 +1,10 @@
 import type { Config } from 'drizzle-kit';
-import { join } from 'path';
 
 export default {
   schema: './src/db/schema.ts',
   out: './migrations',
-  dialect: 'sqlite',
+  dialect: 'postgresql',
   dbCredentials: {
-    url: join(process.cwd(), 'livion.db')
+    url: process.env.DATABASE_URL || '',
   }
 } as Config; 

@@ -1,19 +1,19 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { BaseRepository } from './base';
-import { IScheduleRepository, ScheduleEntry } from './interfaces';
+import { ITaskRepository, Task } from './interfaces';
 
 /**
- * Schedule Repository实现
+ * Task Repository实现 (formerly Schedule)
  */
-export class ScheduleRepository extends BaseRepository<ScheduleEntry> implements IScheduleRepository {
+export class TaskRepository extends BaseRepository<Task> implements ITaskRepository {
   constructor(supabase: SupabaseClient) {
-    super(supabase, 'schedule_entries', 'entry_id', 'user_id');
+    super(supabase, 'task', 'entry_id', 'user_id');
   }
 
   /**
    * 根据日期获取日程安排
    */
-  async getByDate(date: Date | string, userId: string): Promise<ScheduleEntry[]> {
+  async getByDate(date: Date | string, userId: string): Promise<Task[]> {
     const dateStr = this.formatDateForDB(date);
     
     const { data, error } = await this.supabase
@@ -29,7 +29,7 @@ export class ScheduleRepository extends BaseRepository<ScheduleEntry> implements
   /**
    * 根据日期范围获取日程安排
    */
-  async getByDateRange(startDate: Date | string, endDate: Date | string, userId: string): Promise<ScheduleEntry[]> {
+  async getByDateRange(startDate: Date | string, endDate: Date | string, userId: string): Promise<Task[]> {
     const startDateStr = this.formatDateForDB(startDate);
     const endDateStr = this.formatDateForDB(endDate);
     
@@ -47,7 +47,7 @@ export class ScheduleRepository extends BaseRepository<ScheduleEntry> implements
   /**
    * 创建日程安排（重写以处理日期格式）
    */
-  async create(data: any, userId: string): Promise<ScheduleEntry> {
+  async create(data: any, userId: string): Promise<Task> {
     const formattedData = {
       ...data,
       date: this.formatDateForDB(data.date)
@@ -59,7 +59,7 @@ export class ScheduleRepository extends BaseRepository<ScheduleEntry> implements
   /**
    * 更新日程安排（重写以处理日期格式）
    */
-  async update(id: number, data: Partial<ScheduleEntry>, userId: string): Promise<void> {
+  async update(id: number, data: Partial<Task>, userId: string): Promise<void> {
     const formattedData = { ...data };
     if (data.date) {
       formattedData.date = this.formatDateForDB(data.date);

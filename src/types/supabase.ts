@@ -17,8 +17,8 @@ export interface Goal {
   created_at: string;      // 创建时间
 }
 
-// 3. 支线任务
-export interface Task {
+// 3. 支线任务（挑战）
+export interface Challenge {
   task_id: number;         // 主键
   user_id: number;         // 外键，关联到 users 表
   goal_id?: number;        // 外键，关联到 goals 表
@@ -31,18 +31,18 @@ export interface Task {
   image_path?: string;     // 图片路径
 }
 
-// 4. 日常任务模板
-export interface TaskTemplate {
+// 4. 行为模板
+export interface Behaviour {
   template_id: number;     // 主键
   user_id: number;         // 外键，关联到 users 表
   name: string;           // 模板名称
   description?: string;    // 模板描述
-  default_points: number;  // 默认积分
+  reward_points: number;   // 奖励积分
   created_at: string;      // 创建时间
 }
 
-// 5. 任务安排
-export interface ScheduleEntry {
+// 5. 日程任务
+export interface Task {
   entry_id: number;        // 主键
   user_id: number;         // 外键，关联到 users 表
   date: string;           // 日期

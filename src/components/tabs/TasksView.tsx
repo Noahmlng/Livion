@@ -1,17 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import ReactCropperPro from 'react-cropper-pro';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
-import defaultTaskImage from '../../assets/ac-valhalla-settlement.avif';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDb } from '../../context/DbContext';
 import { useAppState } from '../../context/AppStateContext';
-import { Task } from '../../types/supabase';
+import { Challenge } from '../../repositories/interfaces';
 import {
   Card,
   CardBody,
-  CardHeader,
   Button,
   Input,
   Textarea,
@@ -24,8 +17,7 @@ import {
   useDisclosure,
   Divider,
   ScrollShadow,
-  Progress,
-  Avatar
+  Progress
 } from '@heroui/react';
 
 // 添加隐藏滚动条的样式
@@ -186,7 +178,6 @@ const TasksView = () => {
     state,
     setSelectedTaskId,
     setEditingTitle,
-    setEditingReward,
     setEditingDescription,
   } = useAppState();
   
@@ -194,7 +185,6 @@ const TasksView = () => {
   const {
     selectedTaskId,
     editingTitle,
-    editingReward,
     editingDescription,
   } = state.tasksView;
   
@@ -206,12 +196,10 @@ const TasksView = () => {
     description: ''
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showCropper, setShowCropper] = useState(false);
-  const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   
   // 任务详情编辑弹窗
-  const { isOpen: isTaskModalOpen, onOpen: onTaskModalOpen, onOpenChange: onTaskModalOpenChange } = useDisclosure();
+  const { isOpen: isTaskModalOpen, onOpenChange: onTaskModalOpenChange } = useDisclosure();
   const [modalTaskContent, setModalTaskContent] = useState({
     title: '',
     description: ''
@@ -250,7 +238,7 @@ const TasksView = () => {
   // Load tasks when component mounts
   useEffect(() => {
     loadTasks();
-  }, []);
+  }, [loadTasks]);
   
   // Update the selected task when tasks change or the selected task is updated
   useEffect(() => {
@@ -270,7 +258,7 @@ const TasksView = () => {
     } else if (challengeTasks.length > 0 && !selectedTask) {
       setSelectedTaskId(challengeTasks[0].task_id);
     }
-  }, [tasks, challengeTasks]);
+  }, [tasks, challengeTasks, selectedTask, setSelectedTaskId]);
   
   // Initialize editing state when a new task is selected (simplified)
   useEffect(() => {
@@ -282,7 +270,7 @@ const TasksView = () => {
       });
       setEditingDescription(true);
     }
-  }, [selectedTask?.task_id]); // Only depend on task_id to avoid loops
+  }, [selectedTask?.task_id, selectedTask, setEditingDescription]); // Only depend on task_id to avoid loops
 
   // Set focus when editing begins
   useEffect(() => {
@@ -298,7 +286,7 @@ const TasksView = () => {
   }, [editingDescription]);
   
   // Helper function to update the task and refresh the data
-  const handleTaskUpdate = async (taskId: string, data: Partial<Task>, showLoading: boolean = true) => {
+  const handleTaskUpdate = async (taskId: string, data: Partial<Challenge>, showLoading: boolean = true) => {
     if (showLoading) {
       setIsUpdating(true);
     }
@@ -307,7 +295,7 @@ const TasksView = () => {
       // Immediately reload tasks to reflect changes
       await loadTasks();
     } catch (error) {
-      
+      console.error('Error updating task:', error);
     } finally {
       if (showLoading) {
         setIsUpdating(false);
@@ -381,51 +369,13 @@ const TasksView = () => {
         setSelectedTaskId(null);
       }
     } catch (error) {
-      
+      console.error('Error deleting task:', error);
     }
   };
   
-  // Handlers for image upload and cropping
-  const handleImageClick = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      if (target.files && target.files.length > 0) {
-        setImageFile(target.files[0]);
-        setShowCropper(true);
-      }
-    };
-    input.click();
-  };
+
   
-  const handleCropComplete = async (croppedImageUrl: string) => {
-    if (!selectedTask) return;
-    
-    // In a real implementation, you would upload the cropped image to storage
-    // For now, we'll just update the task with the data URL
-    await handleTaskUpdate(selectedTask.task_id.toString(), { image_path: croppedImageUrl });
-    setShowCropper(false);
-  };
-  
-  // Function to determine priority colors
-  const getPriorityColor = (index: number, priority: number) => {
-    if (index < priority && index < 6) {
-      // Priority levels filled - using warm tones with distinct gradients
-      return [
-        'bg-success', // Priority 1
-        'bg-warning', // Priority 2
-        'bg-danger', // Priority 3
-        'bg-danger', // Priority 4
-        'bg-danger', // Priority 5
-        'bg-danger', // Priority 6
-      ][index] || 'bg-danger';
-    }
-    
-    // Empty priority indicators
-    return 'bg-default-300';
-  };
+
   
   // Function to handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: 'title' | 'description' | 'reward') => {
@@ -453,27 +403,13 @@ const TasksView = () => {
         setSelectedTaskId(newTask.task_id);
       }
     } catch (error) {
-      
+      console.error('Error creating task:', error);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // 打开任务详情编辑弹窗
-  const openTaskModal = (task: Task) => {
-    setModalTaskContent({
-      title: task.name,
-      description: task.description || ''
-    });
-    onTaskModalOpen();
-    
-    // 聚焦到弹窗文本框
-    setTimeout(() => {
-      if (modalTitleRef.current) {
-        modalTitleRef.current.focus();
-      }
-    }, 100);
-  };
+
 
   // 保存弹窗中的任务内容
   const saveModalTask = async () => {
@@ -488,7 +424,7 @@ const TasksView = () => {
       // 关闭弹窗
       onTaskModalOpenChange();
     } catch (error) {
-      
+      console.error('Error saving modal task:', error);
     }
   };
 
@@ -815,37 +751,7 @@ const TasksView = () => {
             </CardBody>
           )}
           
-          {showCropper && imageFile && (
-            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-              <Card className="max-w-3xl w-full m-4 border border-primary/50">
-                <CardHeader className="border-b border-divider">
-                  <h3 className="text-xl font-mono font-bold text-primary tracking-wider">
-                    CROP IMAGE
-                  </h3>
-                </CardHeader>
-                
-                <CardBody className="p-6">
-                  <ReactCropperPro
-                    src={URL.createObjectURL(imageFile)}
-                    onChange={handleCropComplete}
-                    aspectRatio={16/9}
-                  />
-                </CardBody>
-                
-                <Divider />
-                
-                <div className="p-4 flex justify-end gap-3">
-                  <Button
-                    variant="bordered"
-                    onClick={() => setShowCropper(false)}
-                    className="font-mono font-bold"
-                  >
-                    取消
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          )}
+
         </Card>
       </div>
 

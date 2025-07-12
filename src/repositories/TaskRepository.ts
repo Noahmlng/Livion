@@ -1,19 +1,19 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { BaseRepository } from './base';
-import { ITaskRepository, Task } from './interfaces';
+import { IChallengeRepository, Challenge } from './interfaces';
 
 /**
- * Task Repository实现
+ * Challenge Repository实现 (formerly Task)
  */
-export class TaskRepository extends BaseRepository<Task> implements ITaskRepository {
+export class ChallengeRepository extends BaseRepository<Challenge> implements IChallengeRepository {
   constructor(supabase: SupabaseClient) {
-    super(supabase, 'tasks', 'task_id', 'user_id');
+    super(supabase, 'challenge', 'task_id', 'user_id');
   }
 
   /**
    * 根据目标ID获取任务列表
    */
-  async getByGoal(goalId: string, userId: string): Promise<Task[]> {
+  async getByGoal(goalId: string, userId: string): Promise<Challenge[]> {
     const { data, error } = await this.supabase
       .from(this.tableName)
       .select('*')
@@ -27,7 +27,7 @@ export class TaskRepository extends BaseRepository<Task> implements ITaskReposit
   /**
    * 根据状态获取任务列表
    */
-  async getByStatus(status: string, userId: string): Promise<Task[]> {
+  async getByStatus(status: string, userId: string): Promise<Challenge[]> {
     const { data, error } = await this.supabase
       .from(this.tableName)
       .select('*')
@@ -57,7 +57,7 @@ export class TaskRepository extends BaseRepository<Task> implements ITaskReposit
   /**
    * 获取所有任务（重写以添加排序）
    */
-  async getAll(userId: string): Promise<Task[]> {
+  async getAll(userId: string): Promise<Challenge[]> {
     const { data, error } = await this.supabase
       .from(this.tableName)
       .select('*')

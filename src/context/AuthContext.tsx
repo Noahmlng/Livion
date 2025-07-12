@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUser = await userService.getCurrentUser(userId);
       setUser(currentUser);
     } catch (error) {
-      
+      console.error('Error refreshing auth state:', error);
       setUser(null);
       // 清除无效的session
       sessionStorage.removeItem('user_id');
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem('user_id');
       setUser(null);
     } catch (error) {
-      
+      console.error('Error signing out:', error);
     }
   };
 

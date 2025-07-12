@@ -7,7 +7,7 @@ import { INoteRepository, Note } from './interfaces';
  */
 export class NoteRepository extends BaseRepository<Note> implements INoteRepository {
   constructor(supabase: SupabaseClient) {
-    super(supabase, 'notes', 'note_id', 'user_id');
+    super(supabase, 'note', 'note_id', 'user_id');
   }
 
   /**

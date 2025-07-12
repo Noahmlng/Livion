@@ -17,6 +17,7 @@ try {
     throw new Error('无效的Supabase Key配置');
   }
 } catch (error) {
+  console.error('Supabase configuration error:', error);
   throw new Error('Supabase环境配置错误，请正确设置环境变量');
 }
 
@@ -25,6 +26,7 @@ let supabase: SupabaseClient;
 try {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
 } catch (error) {
+  console.error('Supabase client creation failed:', error);
   throw new Error('Supabase客户端创建失败');
 }
 

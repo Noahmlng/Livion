@@ -1,24 +1,20 @@
 import supabase from './supabase';
-import { User } from '../types/supabase';
+import { User } from '../repositories/interfaces';
 import { getServiceFactory } from '../config/di';
 
 /**
  * Sign in with password
  */
 export const signIn = async (password: string): Promise<User> => {
-  try {
-    // 使用新的服务层
-    const serviceFactory = getServiceFactory();
-    const userService = serviceFactory.getUserService();
-    const user = await userService.login(password);
-    
-    // 存储用户 ID 到 session storage
-    sessionStorage.setItem('user_id', user.user_id.toString());
-    
-    return user;
-  } catch (error) {
-    throw error;
-  }
+  // 使用新的服务层
+  const serviceFactory = getServiceFactory();
+  const userService = serviceFactory.getUserService();
+  const user = await userService.login(password);
+  
+  // 存储用户 ID 到 session storage
+  sessionStorage.setItem('user_id', user.user_id.toString());
+  
+  return user;
 };
 
 /**
@@ -31,23 +27,14 @@ export const signOut = async (): Promise<void> => {
 /**
  * Get the current logged in user
  */
-export const getCurrentUser = async (): Promise<User | null> => {
-  const userId = sessionStorage.getItem('user_id');
-  
-  if (!userId) {
+export async function getCurrentUser() {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error('Error getting current user:', error);
     return null;
   }
-
-  try {
-    // 使用新的服务层
-    const serviceFactory = getServiceFactory();
-    const userService = serviceFactory.getUserService();
-    const user = await userService.getCurrentUser(userId);
-    return user;
-  } catch (error) {
-    return null;
-  }
-};
+  return user;
+}
 
 /**
  * Sign up a new user with just a login key

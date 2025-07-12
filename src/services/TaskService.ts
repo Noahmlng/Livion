@@ -1,14 +1,14 @@
 import { ITaskService } from './interfaces';
-import { ITaskRepository, IUserRepository, Task } from '../repositories/interfaces';
+import { IChallengeRepository, IUserRepository, Challenge } from '../repositories/interfaces';
 
 /**
  * 任务服务实现
  */
 export class TaskService implements ITaskService {
-  private taskRepository: ITaskRepository;
+  private taskRepository: IChallengeRepository;
   private userRepository: IUserRepository;
 
-  constructor(taskRepository: ITaskRepository, userRepository: IUserRepository) {
+  constructor(taskRepository: IChallengeRepository, userRepository: IUserRepository) {
     this.taskRepository = taskRepository;
     this.userRepository = userRepository;
   }
@@ -16,28 +16,28 @@ export class TaskService implements ITaskService {
   /**
    * 获取所有任务
    */
-  async getAllTasks(userId: string): Promise<Task[]> {
+  async getAllTasks(userId: string): Promise<Challenge[]> {
     return await this.taskRepository.getAll(userId);
   }
 
   /**
    * 根据目标获取任务
    */
-  async getTasksByGoal(goalId: string, userId: string): Promise<Task[]> {
+  async getTasksByGoal(goalId: string, userId: string): Promise<Challenge[]> {
     return await this.taskRepository.getByGoal(goalId, userId);
   }
 
   /**
    * 根据状态获取任务
    */
-  async getTasksByStatus(status: string, userId: string): Promise<Task[]> {
+  async getTasksByStatus(status: string, userId: string): Promise<Challenge[]> {
     return await this.taskRepository.getByStatus(status, userId);
   }
 
   /**
    * 创建新任务
    */
-  async createTask(taskData: Omit<Task, 'task_id' | 'created_at' | 'user_id'>, userId: string): Promise<Task> {
+  async createTask(taskData: Omit<Challenge, 'task_id' | 'created_at' | 'user_id'>, userId: string): Promise<Challenge> {
     // 可以在这里添加业务逻辑，如任务验证、默认值设置等
     const taskToCreate = {
       ...taskData,
@@ -52,7 +52,7 @@ export class TaskService implements ITaskService {
   /**
    * 更新任务
    */
-  async updateTask(taskId: number, updates: Partial<Task>, userId: string): Promise<void> {
+  async updateTask(taskId: number, updates: Partial<Challenge>, userId: string): Promise<void> {
     // 可以在这里添加业务逻辑，如权限验证、数据验证等
     await this.taskRepository.update(taskId, updates, userId);
   }

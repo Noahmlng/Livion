@@ -64,7 +64,4 @@ export async function getDB() {
 // Helper for generating unique IDs
 export function generateId(prefix: string = '') {
   return `${prefix}${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-}
-
-// Future migrations and schema changes will be handled with drizzle-kit
-// Run `npx drizzle-kit generate:sqlite` to generate migrations 
+} 

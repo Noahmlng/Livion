@@ -6,7 +6,7 @@ export * from './UserService';
 export * from './TaskService';
 export * from './ScheduleService';
 export * from './NoteService';
-export * from './GoalService';
+export * from './GoalService'; // UserGoalService
 export * from './TemplateService';
 
 // 导出服务工厂

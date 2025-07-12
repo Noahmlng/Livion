@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Card, 
   CardBody, 
@@ -14,27 +13,18 @@ import {
   ModalContent, 
   ModalHeader, 
   ModalBody, 
-  ModalFooter, 
   useDisclosure,
-  Divider,
-  ScrollShadow,
-  Switch,
-  Badge,
-  Avatar,
-  Spacer
+  ScrollShadow
 } from '@heroui/react';
 import { useValhallaTaskContext } from '../../context/ValhallaTaskContext';
 import { useDb } from '../../context/DbContext';
 import { useAppState } from '../../context/AppStateContext';
+import { Task } from '../../repositories/interfaces';
 import { 
   DragDropContext, 
   Droppable, 
   Draggable,
-  resetServerContext,
-  DroppableProvided,
-  DraggableProvided,
-  DroppableStateSnapshot,
-  DraggableStateSnapshot
+  resetServerContext
 } from 'react-beautiful-dnd';
 import morningBg from '../../assets/morning-bg.jpg';
 import afternoonBg from '../../assets/afternoon-bg.jpg';
@@ -93,12 +83,12 @@ interface TaskTemplate {
   user_id: number;
   name: string;
   description?: string;
-  default_points: number;
+  reward_points: number;
   created_at?: string;
 }
 
-// 任务接口
-interface Task {
+// 本地任务接口（用于UI显示）
+interface LocalTask {
   task_id: number;
   name: string;
   description?: string;
@@ -111,58 +101,9 @@ interface Task {
   priority?: number;  // 添加priority字段
 }
 
-// 辅助函数：检查两个日期是否在同一天（基于当地时间）
-const isSameDay = (date1: Date, date2: Date): boolean => {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
-};
 
-// 辅助函数：正确处理UTC日期，避免自动时区转换导致的+8小时问题
-const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
-  if (!isoDateString) return new Date();
 
-  try {
-    // 检查是否已经是日期对象
-    if (typeof isoDateString !== 'string' && isoDateString instanceof Date) {
-      return isoDateString;
-    }
-    
-    // 直接用JS的Date解析 - 数据库已经存储的是北京时间
-    const date = new Date(isoDateString);
-    
-    // 如果日期解析正确，直接返回
-    if (!isNaN(date.getTime())) {
-      return date;
-    }
-    
-    // 处理特殊格式
-    if (typeof isoDateString === 'string') {
-      // 仅日期格式: 2025-05-11
-      const dateOnlyMatch = isoDateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (dateOnlyMatch) {
-        const [_, year, month, day] = dateOnlyMatch;
-        
-        // 创建本地日期对象
-        const newDate = new Date();
-        newDate.setFullYear(parseInt(year));
-        newDate.setMonth(parseInt(month) - 1); // 月份从0开始
-        newDate.setDate(parseInt(day));
-        newDate.setHours(0, 0, 0, 0);
-        
-        return newDate;
-      }
-    }
-    
-    // 最后的回退选项
-    return new Date();
-  } catch (error) {
-    
-    return new Date(); // 返回当前时间作为备选
-  }
-};
+
 
 // 自定义日期格式化函数，直接处理字符串，避免时区问题
 const formatDateTime = (date: Date | string): string => {
@@ -527,7 +468,7 @@ const TodayView = () => {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   
   // 用户的任务
-  const [userTasks, setUserTasks] = useState<Task[]>([]);
+  const [userTasks, setUserTasks] = useState<LocalTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   
   // Force a rerender of the DragDropContext on mount to fix initialization issues
@@ -710,7 +651,16 @@ const TodayView = () => {
           const priorityA = a.priority || 0;
           const priorityB = b.priority || 0;
           return priorityB - priorityA;  // 倒序排列
-        });
+        })
+        .map(task => ({
+          task_id: task.task_id,
+          name: task.name,
+          description: task.description,
+          status: task.status,
+          reward_points: task.reward_points,
+          user_id: task.user_id,
+          priority: task.priority
+        }));
       
       setUserTasks(filteredTasks);
       console.log('[TodayView] UserTasks updated:', filteredTasks.length);
@@ -760,7 +710,6 @@ const TodayView = () => {
         // 如果是Date对象，提取日期部分
         entryDateStr = entry.date.toISOString().split('T')[0];
       } else {
-        
         return false;
       }
       
@@ -874,7 +823,7 @@ const TodayView = () => {
         }
       });
     } catch (error) {
-      
+      console.error('Error loading history data:', error);
     } finally {
       setLoading(false);
     }
@@ -918,7 +867,7 @@ const TodayView = () => {
           const convertedResults = searchResults.map(convertDbNoteToUINote);
           setFilteredNotes(convertedResults);
         } catch (error) {
-          
+          console.error('Error searching notes:', error);
           setFilteredNotes([]);
         }
       };
@@ -1076,7 +1025,7 @@ const TodayView = () => {
         setHasMoreNotes(notes.length > startIndex + pageSize);
       }
     } catch (error) {
-      
+      console.error('Error loading notes data:', error);
     } finally {
       setNotesLoading(false);
     }
@@ -1106,7 +1055,7 @@ const TodayView = () => {
         }
       }
     } catch (error) {
-      
+      console.error('Error handling active tab change:', error);
     }
   }, [activeTab]);
   
@@ -1292,7 +1241,7 @@ const TodayView = () => {
         const convertedResults = searchResults.map(convertDbNoteToUINote);
         setFilteredNotes(convertedResults);
       } catch (error) {
-        
+        console.error('Error searching notes:', error);
         setFilteredNotes([]);
       }
     } else {
@@ -1386,7 +1335,7 @@ const TodayView = () => {
       }
       
     } catch (error) {
-      
+      console.error('Error saving edited note:', error);
       // 发生错误时恢复原始状态
       setNotesState(prevNotes => {
         const editingNote = prevNotes.find(note => note.id === editingNoteId);
@@ -1458,7 +1407,7 @@ const TodayView = () => {
         });
       }
     } catch (error) {
-      
+      console.error('Error deleting note:', error);
       // 发生错误时恢复原始状态
       setNotesState(prevNotes => {
         // 重新插入已删除的笔记到正确位置
@@ -1604,7 +1553,7 @@ const TodayView = () => {
     id: template.template_id?.toString() || '',
     title: template.name || '',
     description: template.description || '',
-    reward_points: template.default_points || 0
+            reward_points: template.reward_points || 0
   })).filter(task => !!task.id);
   
   // 安全地生成拖拽 ID
@@ -1696,10 +1645,13 @@ const TodayView = () => {
     // 创建任务数据
     
     const createData = {
-      title,
-      timeSlot: timeSlot,
-      scheduled_date: dateStr,
-      source_type: 'custom'
+      date: dateStr,
+      slot: timeSlot,
+      status: 'ongoing' as const,
+      task_type: 'custom' as const,
+      custom_name: title,
+      description: '',
+      reward_points: 0
     };
     console.log(JSON.stringify(createData, null, 2));
     
@@ -2133,48 +2085,45 @@ const TodayView = () => {
         const taskType = source.droppableId === 'challenges' ? 'challenge' : 'template';
         
         // 创建新的条目数据
-        const newEntry: Record<string, any> = {
-          // UI字段
-          title: task.title,
-          timeSlot: destination.droppableId as TimeSlot,
-          scheduled_date: dateStr,
-          source_type: taskType,
-          
-          // 数据库字段
-          custom_name: task.title,
-          description: task.description || '', // 将custom_desc改为description
-          reward_points: task.reward_points || 0,
-          slot: destination.droppableId,
-          date: dateStr,
-          task_type: taskType,
-          status: 'ongoing'
-        };
+        let newEntry: Omit<Task, 'entry_id' | 'created_at' | 'user_id'>;
         
-        // 添加ID字段
         if (taskType === 'challenge') {
           const taskId = parseInt(task.id);
           if (isNaN(taskId)) {
             
             return;
           }
-          newEntry.task_id = taskId;
-          newEntry.ref_task_id = taskId;
+          newEntry = {
+            date: dateStr,
+            slot: destination.droppableId as string,
+            status: 'ongoing' as const,
+            task_type: taskType as string,
+            custom_name: task.title,
+            description: task.description || '',
+            reward_points: task.reward_points || 0,
+            ref_task_id: taskId
+          };
         } else {
           const templateId = parseInt(task.id);
           if (isNaN(templateId)) {
             
             return;
           }
-          newEntry.template_id = templateId;
-          newEntry.ref_template_id = templateId;
           
           // 对于模板任务，确保正确获取和设置奖励点数和描述
           // 查找完整的模板信息
           const templateInfo = taskTemplates.find(t => t.template_id.toString() === task.id);
-          if (templateInfo) {
-            newEntry.reward_points = templateInfo.default_points || 0;
-            newEntry.description = templateInfo.description || '';
-          }
+          
+          newEntry = {
+            date: dateStr,
+            slot: destination.droppableId as string,
+            status: 'ongoing' as const,
+            task_type: taskType as string,
+            custom_name: task.title,
+            description: templateInfo?.description || task.description || '',
+            reward_points: templateInfo?.reward_points || task.reward_points || 0,
+            ref_template_id: templateId
+          };
         }
 
         const result = await createScheduleEntry(newEntry);

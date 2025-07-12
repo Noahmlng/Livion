@@ -1,39 +1,47 @@
 import { IScheduleService } from './interfaces';
-import { IScheduleRepository, ScheduleEntry } from '../repositories/interfaces';
+import { ITaskRepository, Task } from '../repositories/interfaces';
 
 /**
  * 日程服务实现
  */
 export class ScheduleService implements IScheduleService {
-  private scheduleRepository: IScheduleRepository;
+  private scheduleRepository: ITaskRepository;
 
-  constructor(scheduleRepository: IScheduleRepository) {
+  constructor(scheduleRepository: ITaskRepository) {
     this.scheduleRepository = scheduleRepository;
   }
 
   /**
    * 获取今日日程
    */
-  async getTodaySchedule(userId: string): Promise<ScheduleEntry[]> {
+  async getTodaySchedule(userId: string): Promise<Task[]> {
     const today = new Date();
-    return await this.scheduleRepository.getByDate(today, userId);
+    const entries = await this.scheduleRepository.getByDate(today, userId);
+    return entries.map(entry => ({
+      ...entry,
+      date: entry.date instanceof Date ? entry.date.toISOString().split('T')[0] : entry.date
+    }));
   }
 
   /**
    * 根据日期获取日程
    */
-  async getScheduleByDate(date: Date | string, userId: string): Promise<ScheduleEntry[]> {
-    return await this.scheduleRepository.getByDate(date, userId);
+  async getScheduleByDate(date: Date | string, userId: string): Promise<Task[]> {
+    const entries = await this.scheduleRepository.getByDate(date, userId);
+    return entries.map(entry => ({
+      ...entry,
+      date: entry.date instanceof Date ? entry.date.toISOString().split('T')[0] : entry.date
+    }));
   }
 
   /**
    * 根据日期范围获取日程
    */
-  async getScheduleByDateRange(startDate: Date | string, endDate: Date | string, userId: string): Promise<Record<string, ScheduleEntry[]>> {
+  async getScheduleByDateRange(startDate: Date | string, endDate: Date | string, userId: string): Promise<Record<string, Task[]>> {
     const entries = await this.scheduleRepository.getByDateRange(startDate, endDate, userId);
     
     // 按日期分组
-    const groupedResult: Record<string, ScheduleEntry[]> = {};
+    const groupedResult: Record<string, Task[]> = {};
     entries.forEach(entry => {
       const dateKey = entry.date instanceof Date 
         ? entry.date.toISOString().split('T')[0]
@@ -50,7 +58,7 @@ export class ScheduleService implements IScheduleService {
   /**
    * 创建日程条目
    */
-  async createScheduleEntry(entryData: Omit<ScheduleEntry, 'entry_id' | 'created_at' | 'user_id'>, userId: string): Promise<ScheduleEntry> {
+  async createScheduleEntry(entryData: Omit<Task, 'entry_id' | 'created_at' | 'user_id'>, userId: string): Promise<Task> {
     // 添加业务逻辑验证
     if (!entryData.slot) {
       throw new Error('Time slot is required');
@@ -73,7 +81,7 @@ export class ScheduleService implements IScheduleService {
   /**
    * 更新日程条目
    */
-  async updateScheduleEntry(entryId: number, updates: Partial<ScheduleEntry>, userId: string): Promise<void> {
+  async updateScheduleEntry(entryId: number, updates: Partial<Task>, userId: string): Promise<void> {
     await this.scheduleRepository.update(entryId, updates, userId);
   }
 

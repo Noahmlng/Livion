@@ -1,82 +1,123 @@
-import { sqliteTable, text, integer, blob } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, integer, bigint, real, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
-// User table
-export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
+// User table - updated for points system
+export const users = pgTable('users', {
+  user_id: bigint('user_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  password: text('password').notNull().unique(),
+  total_points: real('total_points').notNull().default(0),
+  daily_pay: real('daily_pay').notNull().default(1000),
+  user_goals: jsonb('user_goals').default(sql`'[]'::jsonb`),
+  user_competencies_to_develop: jsonb('user_competencies_to_develop').default(sql`'[]'::jsonb`),
+  points_settings: jsonb('points_settings').default(sql`'{}'::jsonb`),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+});
+
+// User goals table - for detailed goal management
+export const userGoals = pgTable('user_goals', {
+  goal_id: bigint('goal_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onDelete: 'cascade' }),
+  goal_text: text('goal_text').notNull(),
+  priority: integer('priority').notNull().default(0),
+  is_active: boolean('is_active').notNull().default(true),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+});
+
+// Challenge table - updated for points system (formerly tasks)
+export const challenge = pgTable('challenge', {
+  task_id: bigint('task_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onDelete: 'cascade' }),
+  goal_id: bigint('goal_id', { mode: 'number' }).references(() => userGoals.goal_id, { onDelete: 'set null' }),
   name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
+  description: text('description').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  priority: integer('priority').notNull().default(0),
+  status: text('status').notNull().default('ongoing'),
+  reward_points: real('reward_points').notNull().default(0),
+  image_path: text('image_path'),
+  // Points system fields
+  task_record: text('task_record').default(''),
+  estimated_time: real('estimated_time').default(0),
+  reward_multiplier: real('reward_multiplier').default(1.0),
+  learning_reward: real('learning_reward').default(0),
+  points_calculated_at: timestamp('points_calculated_at', { withTimezone: true }),
+  ai_evaluation: jsonb('ai_evaluation').default(sql`'{}'::jsonb`),
 });
 
-// Goals (main quests, achievements, categories)
-export const goals = sqliteTable('goals', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
+// Behaviour table - updated for Supabase (formerly task_templates)
+export const behaviour = pgTable('behaviour', {
+  template_id: bigint('template_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  name: text('name').notNull(),
   description: text('description'),
-  user_id: text('user_id').notNull().references(() => users.id),
-  parent_id: text('parent_id'),
-  type: text('type').notNull().default('category'), // category, main_quest, achievement
-  reward_points: integer('reward_points').default(0),
-  image_url: text('image_url'),
-  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
-  completed_at: integer('completed_at', { mode: 'timestamp' }),
-  is_completed: integer('is_completed', { mode: 'boolean' }).notNull().default(false),
+  reward_points: real('reward_points').default(0),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onUpdate: 'cascade' }),
 });
 
-// Relation - goals to parent goals (self-reference)
-// This is applied after the table definition to avoid circular references
-// Will be enforced at the application level
-
-// Tasks (challenges, quests)
-export const tasks = sqliteTable('tasks', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
+// Task table - updated for points system (formerly schedule_entries)
+export const task = pgTable('task', {
+  entry_id: bigint('entry_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onDelete: 'cascade' }),
+  date: timestamp('date', { mode: 'date' }).notNull(),
+  slot: text('slot').notNull(),
+  status: text('status').notNull().default('ongoing'),
+  task_type: text('task_type').notNull(),
+  ref_task_id: bigint('ref_task_id', { mode: 'number' }).references(() => challenge.task_id, { onDelete: 'set null' }),
+  ref_template_id: bigint('ref_template_id', { mode: 'number' }).references(() => behaviour.template_id, { onDelete: 'set null' }),
+  custom_name: text('custom_name'),
   description: text('description'),
-  user_id: text('user_id').notNull().references(() => users.id),
-  goal_id: text('goal_id').references(() => goals.id),
-  reward_points: integer('reward_points').default(0),
-  image_url: text('image_url'),
-  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
-  completed_at: integer('completed_at', { mode: 'timestamp' }),
-  is_completed: integer('is_completed', { mode: 'boolean' }).notNull().default(false),
-  category: text('category').default('side'), // side, daily, etc.
+  reward_points: real('reward_points').notNull().default(0),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  // Points system fields
+  task_record: text('task_record').default(''),
+  estimated_time: real('estimated_time').default(0),
+  reward_multiplier: real('reward_multiplier').default(1.0),
+  learning_reward: real('learning_reward').default(0),
+  points_calculated_at: timestamp('points_calculated_at', { withTimezone: true }),
+  ai_evaluation: jsonb('ai_evaluation').default(sql`'{}'::jsonb`),
 });
 
-// Task templates for recurring tasks
-export const taskTemplates = sqliteTable('task_templates', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  description: text('description'),
-  user_id: text('user_id').notNull().references(() => users.id),
-  goal_id: text('goal_id').references(() => goals.id),
-  reward_points: integer('reward_points').default(0),
-  recurrence: text('recurrence'), // daily, weekly, etc.
-  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
-  is_active: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  category: text('category').default('daily'), // daily, weekly, etc.
-});
-
-// Schedule entries for the "Today" view
-export const scheduleEntries = sqliteTable('schedule_entries', {
-  id: text('id').primaryKey(),
-  user_id: text('user_id').notNull().references(() => users.id),
-  task_id: text('task_id').references(() => tasks.id),
-  template_id: text('template_id').references(() => taskTemplates.id),
-  title: text('title').notNull(),
-  time_slot: text('time_slot').notNull(), // morning, afternoon, evening
-  scheduled_date: integer('scheduled_date', { mode: 'timestamp' }).notNull(),
-  completed_at: integer('completed_at', { mode: 'timestamp' }),
-  is_completed: integer('is_completed', { mode: 'boolean' }).notNull().default(false),
-  source_type: text('source_type').notNull(), // challenge, template, custom
-  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
-});
-
-// Notes
-export const notes = sqliteTable('notes', {
-  id: text('id').primaryKey(),
-  user_id: text('user_id').notNull().references(() => users.id),
+// Note table - updated for Supabase (formerly notes)
+export const note = pgTable('note', {
+  note_id: bigint('note_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onDelete: 'cascade' }),
+  goal_id: bigint('goal_id', { mode: 'number' }).references(() => userGoals.goal_id, { onDelete: 'set null' }),
   content: text('content').notNull(),
-  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
-  updated_at: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now'))`),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  updated_at: timestamp('updated_at', { withTimezone: true }).default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  pinned: boolean('pinned').notNull().default(false),
+});
+
+// Points history table - new for points system
+export const pointsHistory = pgTable('points_history', {
+  history_id: bigint('history_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onDelete: 'cascade' }),
+  task_id: bigint('task_id', { mode: 'number' }).references(() => challenge.task_id, { onDelete: 'set null' }),
+  schedule_entry_id: bigint('schedule_entry_id', { mode: 'number' }).references(() => task.entry_id, { onDelete: 'set null' }),
+  task_title: text('task_title').notNull(),
+  task_record: text('task_record').default(''),
+  points_earned: real('points_earned').notNull(),
+  base_amount: real('base_amount').notNull(),
+  reward_amount: real('reward_amount').notNull(),
+  reward_multiplier: real('reward_multiplier').notNull(),
+  learning_reward: real('learning_reward').notNull(),
+  estimated_time: real('estimated_time').notNull(),
+  daily_pay: real('daily_pay').notNull(),
+  reasoning: text('reasoning').default(''),
+  provider: text('provider').default('DeepSeek'),
+  api_cost: real('api_cost').default(0),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+});
+
+// User skills table - optional for detailed skill management
+export const userCompetenciesToDevelop = pgTable('user_competencies_to_develop', {
+  skill_id: bigint('skill_id', { mode: 'number' }).primaryKey().generatedByDefaultAsIdentity(),
+  user_id: bigint('user_id', { mode: 'number' }).notNull().references(() => users.user_id, { onDelete: 'cascade' }),
+  skill_text: text('skill_text').notNull(),
+  priority: integer('priority').notNull().default(0),
+  is_active: boolean('is_active').notNull().default(true),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`(now() AT TIME ZONE 'Asia/Taipei')`),
 }); 

@@ -68,7 +68,8 @@ export function formatDateTime(date: Date | string): string {
     
     return getCurrentDateTimeString();
   } catch (error) {
-    return getCurrentDateTimeString();
+    console.error('Error correcting UTC date:', error);
+    return getCurrentDateTimeString(); // fallback
   }
 }
 
@@ -130,6 +131,7 @@ export function formatTimeOnly(date: Date | string): string {
     const minutes = String(targetDate.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
   } catch (error) {
+    console.error('Error formatting time:', error);
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');

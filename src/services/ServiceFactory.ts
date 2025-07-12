@@ -4,14 +4,14 @@ import {
   ITaskService, 
   IScheduleService, 
   INoteService, 
-  IGoalService, 
+  IUserGoalService, 
   ITemplateService 
 } from './interfaces';
 import { UserService } from './UserService';
 import { TaskService } from './TaskService';
 import { ScheduleService } from './ScheduleService';
 import { NoteService } from './NoteService';
-import { GoalService } from './GoalService';
+import { UserGoalService } from './GoalService';
 import { TemplateService } from './TemplateService';
 
 /**
@@ -26,7 +26,7 @@ export class ServiceFactory {
   private taskService?: ITaskService;
   private scheduleService?: IScheduleService;
   private noteService?: INoteService;
-  private goalService?: IGoalService;
+  private userGoalService?: IUserGoalService;
   private templateService?: ITemplateService;
 
   constructor(repositoryFactory: RepositoryFactory) {
@@ -51,7 +51,7 @@ export class ServiceFactory {
   getTaskService(): ITaskService {
     if (!this.taskService) {
       this.taskService = new TaskService(
-        this.repositoryFactory.getTaskRepository(),
+        this.repositoryFactory.getChallengeRepository(),
         this.repositoryFactory.getUserRepository()
       );
     }
@@ -64,7 +64,7 @@ export class ServiceFactory {
   getScheduleService(): IScheduleService {
     if (!this.scheduleService) {
       this.scheduleService = new ScheduleService(
-        this.repositoryFactory.getScheduleRepository()
+        this.repositoryFactory.getTaskRepository()
       );
     }
     return this.scheduleService;
@@ -83,15 +83,15 @@ export class ServiceFactory {
   }
 
   /**
-   * 获取目标服务
+   * 获取用户目标服务
    */
-  getGoalService(): IGoalService {
-    if (!this.goalService) {
-      this.goalService = new GoalService(
-        this.repositoryFactory.getGoalRepository()
+  getUserGoalService(): IUserGoalService {
+    if (!this.userGoalService) {
+      this.userGoalService = new UserGoalService(
+        this.repositoryFactory.getUserGoalRepository()
       );
     }
-    return this.goalService;
+    return this.userGoalService;
   }
 
   /**
@@ -100,8 +100,8 @@ export class ServiceFactory {
   getTemplateService(): ITemplateService {
     if (!this.templateService) {
       this.templateService = new TemplateService(
-        this.repositoryFactory.getTemplateRepository(),
-        this.repositoryFactory.getTaskRepository()
+        this.repositoryFactory.getBehaviourRepository(),
+        this.repositoryFactory.getChallengeRepository()
       );
     }
     return this.templateService;
