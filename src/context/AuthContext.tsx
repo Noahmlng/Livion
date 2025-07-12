@@ -1,14 +1,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from '../types/supabase';
-import { getCurrentUser, signOut } from '../utils/auth';
-
-// Debug mode
-const DEBUG = true;
+import { User } from '../repositories/interfaces';
+import { getServiceFactory } from '../config/di';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signOutUser: () => Promise<void>;
+  login: (password: string) => Promise<void>;
+  signOut: () => Promise<void>;
   refreshAuthState: () => Promise<void>;
 }
 
@@ -18,24 +16,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshAuthState = async () => {
+  // 获取用户服务
+  const userService = getServiceFactory().getUserService();
+
+  const login = async (password: string) => {
     try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
+      setLoading(true);
+      const loggedInUser = await userService.login(password);
+      setUser(loggedInUser);
+      
+      // 存储用户ID到session storage
+      sessionStorage.setItem('user_id', loggedInUser.user_id.toString());
     } catch (error) {
-      console.error('Error refreshing auth state:', error);
       setUser(null);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  const signOutUser = async () => {
+  const refreshAuthState = async () => {
     try {
-      await signOut();
+      setLoading(true);
+      const userId = sessionStorage.getItem('user_id');
+      
+      if (!userId) {
+        setUser(null);
+        return;
+      }
+
+      const currentUser = await userService.getCurrentUser(userId);
+      setUser(currentUser);
+    } catch (error) {
+      
+      setUser(null);
+      // 清除无效的session
+      sessionStorage.removeItem('user_id');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      // 清除session storage
+      sessionStorage.removeItem('user_id');
       setUser(null);
     } catch (error) {
-      console.error('Error signing out:', error);
+      
     }
   };
 
@@ -46,7 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = {
     user,
     loading,
-    signOutUser,
+    login,
+    signOut,
     refreshAuthState,
   };
 

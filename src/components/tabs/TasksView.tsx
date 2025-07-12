@@ -7,7 +7,7 @@ import remarkBreaks from 'remark-breaks';
 import defaultTaskImage from '../../assets/ac-valhalla-settlement.avif';
 import { useDb } from '../../context/DbContext';
 import { useAppState } from '../../context/AppStateContext';
-import { Task } from '../../utils/database';
+import { Task } from '../../types/supabase';
 import {
   Card,
   CardBody,
@@ -307,7 +307,7 @@ const TasksView = () => {
       // Immediately reload tasks to reflect changes
       await loadTasks();
     } catch (error) {
-      console.error('Error updating task:', error);
+      
     } finally {
       if (showLoading) {
         setIsUpdating(false);
@@ -327,9 +327,7 @@ const TasksView = () => {
     await handleTaskUpdate(selectedTask.task_id.toString(), { name: editingValues.title });
     setEditingTitle(false);
   };
-  
 
-  
   const saveDescription = async () => {
     if (!selectedTask) return;
     await handleTaskUpdate(selectedTask.task_id.toString(), { description: editingValues.description }, false);
@@ -383,7 +381,7 @@ const TasksView = () => {
         setSelectedTaskId(null);
       }
     } catch (error) {
-      console.error('Error deleting task:', error);
+      
     }
   };
   
@@ -455,7 +453,7 @@ const TasksView = () => {
         setSelectedTaskId(newTask.task_id);
       }
     } catch (error) {
-      console.error('创建任务失败:', error);
+      
     } finally {
       setIsUpdating(false);
     }
@@ -490,7 +488,7 @@ const TasksView = () => {
       // 关闭弹窗
       onTaskModalOpenChange();
     } catch (error) {
-      console.error('Error saving modal task:', error);
+      
     }
   };
 
@@ -912,8 +910,6 @@ const TasksView = () => {
                     }}
                   />
                 </div>
-
-                
 
                 {/* 任务描述 */}
                 <div className="space-y-2">

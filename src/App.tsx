@@ -19,13 +19,12 @@ const TABS = [
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('today');
-  const { user, loading, signOutUser, refreshAuthState } = useAuth();
+  const { user, loading, signOut, refreshAuthState } = useAuth();
   const [forceRender, setForceRender] = useState(0);
   const [showLogin, setShowLogin] = useState(true); // 默认显示登录界面
   
   // 检测用户状态并决定是否显示登录页面
   useEffect(() => {
-    console.log('User state changed:', user?.user_id || 'no user');
     if (user) {
       // 有用户登录，隐藏登录界面
       setShowLogin(false);
@@ -39,7 +38,6 @@ function MainApp() {
   
   // 登录成功的回调函数
   const handleLoginSuccess = useCallback(async () => {
-    console.log('Login successful callback triggered');
     try {
       // 刷新身份验证状态
       await refreshAuthState();
@@ -49,8 +47,6 @@ function MainApp() {
       
       // 触发重新渲染
       setForceRender(prev => prev + 1);
-      
-      console.log('Login success handling completed');
     } catch (err) {
       console.error('Error during login success handling:', err);
     }
@@ -58,15 +54,12 @@ function MainApp() {
   
   // 加载中状态
   if (loading) {
-    console.log('App is loading...');
     return (
       <div className="min-h-screen bg-bg-dark flex items-center justify-center">
         <div className="text-text-primary text-xl">加载中...</div>
       </div>
     );
   }
-  
-  console.log('Rendering main app. Show login:', showLogin);
   
   // 根据showLogin状态决定显示登录页面还是主应用
   return (

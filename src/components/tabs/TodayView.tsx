@@ -159,7 +159,7 @@ const correctUtcDate = (isoDateString: string | undefined | Date): Date => {
     // 最后的回退选项
     return new Date();
   } catch (error) {
-    console.error('Date parsing error:', error);
+    
     return new Date(); // 返回当前时间作为备选
   }
 };
@@ -169,7 +169,7 @@ const formatDateTime = (date: Date | string): string => {
   try {
     // 首先检查输入是否为空或未定义
     if (!date || date === 'null' || date === 'undefined') {
-      console.warn('[formatDateTime] 输入为空或未定义:', date);
+      
       return getCurrentDateTimeString();
     }
     
@@ -194,7 +194,7 @@ const formatDateTime = (date: Date | string): string => {
         // 服务器存储的UTC时间实际上是北京时间，需要减去8小时修正
         const serverDate = new Date(date);
         if (isNaN(serverDate.getTime())) {
-          console.warn('[formatDateTime] 无效的ISO日期字符串:', date);
+          
           return getCurrentDateTimeString();
         }
         const correctedDate = new Date(serverDate.getTime() - 8 * 60 * 60 * 1000);
@@ -225,13 +225,13 @@ const formatDateTime = (date: Date | string): string => {
       }
       
       // 其他未知格式，返回当前时间
-      console.warn('[formatDateTime] 未知的日期字符串格式:', date);
+      
       return getCurrentDateTimeString();
     }
 
     // 如果是Date对象但无效
     if (date instanceof Date && isNaN(date.getTime())) {
-      console.warn('[formatDateTime] 无效的Date对象:', date);
+      
       return getCurrentDateTimeString();
     }
 
@@ -247,10 +247,10 @@ const formatDateTime = (date: Date | string): string => {
     }
     
     // 未知类型，返回当前时间
-    console.warn('[formatDateTime] 未知的输入类型:', typeof date, date);
+    
     return getCurrentDateTimeString();
   } catch (error) {
-    console.error('[formatDateTime] 日期格式化错误:', error, date);
+    
     return getCurrentDateTimeString();
   }
 };
@@ -265,11 +265,10 @@ function getCurrentDateTimeString(): string {
   // Notes专用的时间格式化函数
 const formatNoteTime = (date: Date | string): string => {
   try {
-    console.log('[formatNoteTime] 函数被调用，输入:', date, typeof date);
     
     // 首先检查输入是否为空、未定义或特殊值
     if (!date || date === 'null' || date === 'undefined' || date === '未知时间') {
-      console.warn('[formatNoteTime] 输入为空或特殊值:', date);
+      
       // 返回当前时间的HH:MM格式
       const now = new Date();
       const hours = String(now.getHours()).padStart(2, '0');
@@ -283,23 +282,19 @@ const formatNoteTime = (date: Date | string): string => {
     if (typeof date === 'string') {
       // formatDateTime生成的格式: YYYY-MM-DD HH:MM (这个已经是本地时间，不需要转换)
       if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(date)) {
-        console.log('[formatNoteTime] 处理本地格式:', date);
+        
         const parts = date.split(' ');
         const datePart = parts[0]; // YYYY-MM-DD
         const timePart = parts[1]; // HH:MM
-        
-        console.log('[formatNoteTime] datePart:', datePart, 'timePart:', timePart);
-        
+
         const [year, month, day] = datePart.split('-').map(Number);
         const [hour, minute] = timePart.split(':').map(Number);
-        
-        console.log('[formatNoteTime] 解析的数值:', { year, month, day, hour, minute });
-        
+
         // 验证解析出的数值是否有效
         if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute) ||
             year < 1970 || month < 1 || month > 12 || day < 1 || day > 31 || 
             hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-          console.error('[formatNoteTime] 解析出的数值无效:', { year, month, day, hour, minute });
+          
           // 返回当前时间的HH:MM格式
           const now = new Date();
           const hours = String(now.getHours()).padStart(2, '0');
@@ -309,7 +304,7 @@ const formatNoteTime = (date: Date | string): string => {
         
         // 这个时间已经是本地时间，直接使用
         noteDate = new Date(year, month - 1, day, hour, minute, 0);
-        console.log('[formatNoteTime] 创建的Date对象:', noteDate);
+        
         console.log('[formatNoteTime] Date对象是否有效:', !isNaN(noteDate.getTime()));
       }
       // PostgreSQL格式: 2023-04-15 10:30:45.123456+08
@@ -325,7 +320,7 @@ const formatNoteTime = (date: Date | string): string => {
         
         // 验证解析出的数值是否有效
         if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute)) {
-          console.error('[formatNoteTime] PostgreSQL格式解析失败:', { year, month, day, hour, minute });
+          
           // 返回当前时间的HH:MM格式
           const now = new Date();
           const hours = String(now.getHours()).padStart(2, '0');
@@ -337,15 +332,15 @@ const formatNoteTime = (date: Date | string): string => {
       }
       // ISO格式: 2023-04-15T10:30:00.000Z (需要修正服务器错误存储的时区)
       else if (date.includes('T')) {
-        console.log('[formatNoteTime] 处理ISO格式:', date);
+        
         // 服务器存储的UTC时间实际上是北京时间，需要减去8小时修正
         const serverDate = new Date(date);
-        console.log('[formatNoteTime] 原始serverDate:', serverDate);
+        
         console.log('[formatNoteTime] serverDate.getTime():', serverDate.getTime());
         console.log('[formatNoteTime] serverDate 是否有效:', !isNaN(serverDate.getTime()));
         
         if (isNaN(serverDate.getTime())) {
-          console.error('[formatNoteTime] ISO格式日期无效:', date);
+          
           // 返回当前时间的HH:MM格式
           const now = new Date();
           const hours = String(now.getHours()).padStart(2, '0');
@@ -354,7 +349,7 @@ const formatNoteTime = (date: Date | string): string => {
         }
         
         noteDate = new Date(serverDate.getTime() - 8 * 60 * 60 * 1000);
-        console.log('[formatNoteTime] 修正后的时间:', noteDate);
+        
         console.log('[formatNoteTime] 修正后时间是否有效:', !isNaN(noteDate.getTime()));
         console.log('[formatNoteTime] 修正后的 getHours():', noteDate.getHours());
       }
@@ -362,7 +357,7 @@ const formatNoteTime = (date: Date | string): string => {
       else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         const [year, month, day] = date.split('-').map(Number);
         if (isNaN(year) || isNaN(month) || isNaN(day)) {
-          console.error('[formatNoteTime] YYYY-MM-DD格式解析失败:', { year, month, day });
+          
           // 返回当前时间的HH:MM格式
           const now = new Date();
           const hours = String(now.getHours()).padStart(2, '0');
@@ -375,7 +370,7 @@ const formatNoteTime = (date: Date | string): string => {
       else {
         noteDate = new Date(date);
         if (isNaN(noteDate.getTime())) {
-          console.error('[formatNoteTime] 字符串直接解析失败:', date);
+          
           // 返回当前时间的HH:MM格式
           const now = new Date();
           const hours = String(now.getHours()).padStart(2, '0');
@@ -386,7 +381,7 @@ const formatNoteTime = (date: Date | string): string => {
     } else if (date instanceof Date) {
       noteDate = date;
     } else {
-      console.error('[formatNoteTime] 未知的输入类型:', typeof date, date);
+      
       // 返回当前时间的HH:MM格式
       const now = new Date();
       const hours = String(now.getHours()).padStart(2, '0');
@@ -396,7 +391,7 @@ const formatNoteTime = (date: Date | string): string => {
 
     // 如果是无效的日期对象
     if (!noteDate || isNaN(noteDate.getTime())) {
-      console.error('[formatNoteTime] 日期无效！noteDate:', noteDate, '输入:', date);
+      
       // 返回当前时间的HH:MM格式
       const now = new Date();
       const hours = String(now.getHours()).padStart(2, '0');
@@ -418,7 +413,7 @@ const formatNoteTime = (date: Date | string): string => {
       const hours = String(noteDate.getHours()).padStart(2, '0');
       const minutes = String(noteDate.getMinutes()).padStart(2, '0');
       const result = `${hours}:${minutes}`;
-      console.log('[formatNoteTime] 最终结果:', result);
+      
       return result;
     } else if (noteDay.getTime() === yesterday.getTime()) {
       // 昨天：显示 Yesterday
@@ -430,7 +425,7 @@ const formatNoteTime = (date: Date | string): string => {
       return `${month}-${day}`;
     }
   } catch (error) {
-    console.error('[formatNoteTime] 笔记时间格式化错误:', error, date);
+    
     // 发生错误时返回当前时间的HH:MM格式
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
@@ -460,7 +455,9 @@ const TodayView = () => {
     deleteNote,
     toggleNotePin,
     tasks,
-    loadTasks
+    loadTasks,
+    templates,
+    loadTemplates
   } = useDb();
   
   // 使用应用状态管理
@@ -537,21 +534,16 @@ const TodayView = () => {
   useEffect(() => {
     resetServerContext();
     
-    console.log('TodayView component mounted, initializing data...');
-    console.log('DragDropContext initialized, handlers registered:');
-    console.log('- onDragStart:', handleDragStart);
-    console.log('- onDragEnd:', handleDragEnd);
+    // Initialize TodayView component and drag-drop handlers
     
     // 强制重新渲染拖拽上下文
     setForceUpdateKey(prev => prev + 1);
     
     // 添加拖拽功能增强
     const enhanceDraggableElements = () => {
-      console.log('[拖拽修复] 开始增强拖拽元素');
       
       // 查找所有拖拽相关元素
       const draggables = document.querySelectorAll('[data-rbd-draggable-id], [data-rbd-drag-handle-draggable-id]');
-      console.log(`[拖拽修复] 找到 ${draggables.length} 个拖拽元素`);
       
       // 确保它们可以被拖拽
       draggables.forEach((el, index) => {
@@ -564,12 +556,12 @@ const TodayView = () => {
           
           // 添加视觉反馈
           const handleMouseDown = () => {
-            console.log(`[拖拽修复] 鼠标按下，元素 ${index + 1}`);
+            
             el.style.cursor = 'grabbing';
           };
           
           const handleMouseUp = () => {
-            console.log(`[拖拽修复] 鼠标释放，元素 ${index + 1}`);
+            
             el.style.cursor = 'grab';
           };
           
@@ -582,8 +574,7 @@ const TodayView = () => {
           el.addEventListener('mouseup', handleMouseUp);
         }
       });
-      
-      console.log('[拖拽修复] 拖拽元素增强完成');
+
     };
     
     // 初始化后执行增强，并延迟执行以确保 DOM 完全渲染
@@ -593,7 +584,7 @@ const TodayView = () => {
       // 再次延迟执行，确保所有动态内容都已渲染
       setTimeout(() => {
         enhanceDraggableElements();
-        console.log('[拖拽修复] 延迟增强完成');
+        
       }, 500);
     };
     
@@ -604,7 +595,7 @@ const TodayView = () => {
     const debouncedEnhancement = () => {
       clearTimeout(enhancementTimeout);
       enhancementTimeout = setTimeout(() => {
-        console.log('[拖拽修复] MutationObserver 触发增强');
+        
         enhanceDraggableElements();
       }, 300); // 300ms 防抖
     };
@@ -622,7 +613,7 @@ const TodayView = () => {
                                     node.hasAttribute('data-rbd-drag-handle-draggable-id');
               
               if (hasDragElements) {
-                console.log('[拖拽修复] 检测到新的拖拽元素被添加');
+                
                 shouldEnhance = true;
               }
             }
@@ -653,7 +644,7 @@ const TodayView = () => {
         target.closest('[data-rbd-drag-handle-draggable-id]')
       ) {
         // 如果是拖拽元素，允许拖拽
-        console.log('[拖拽修复] 允许拖拽元素的原生拖拽');
+        
         return true;
       }
       
@@ -674,15 +665,12 @@ const TodayView = () => {
     // Load notes data
     loadNotesData();
     
-    // Load task template data
-    loadTaskTemplates();
+    // Load task template data - 已通过 DbContext 自动处理
     
-    // Load user tasks
-    loadUserTasks();
+    // Load user tasks - 已通过 useEffect 自动处理，无需手动调用
     
     // Clean up event listeners
     return () => {
-      console.log('[拖拽修复] 清理事件监听器和观察者');
       
       // 清理超时
       clearTimeout(enhancementTimeout);
@@ -704,91 +692,39 @@ const TodayView = () => {
     };
   }, []);
   
-  // 当 userId 变化时重新加载任务和模板
+  // 当 userId 变化时，DbContext 会自动加载所有数据，这里只需要等待
   useEffect(() => {
     if (userId) {
-      console.log('User ID changed, reloading tasks and templates...');
-      loadTaskTemplates();
-      loadUserTasks();
+      console.log('[TodayView] UserId changed, DbContext will handle data loading');
+      // 不需要手动加载，DbContext 会自动处理所有数据加载
     }
   }, [userId]);
   
-  // 每当 userTasks 或 taskTemplates 改变时，打印日志以便调试
+  // 新增：监听 tasks 状态变化，自动更新 userTasks
   useEffect(() => {
-    console.log('User tasks updated:', userTasks);
-    console.log('Challenge tasks mapped:', challengeTasks);
-  }, [userTasks]);
-  
-  useEffect(() => {
-    console.log('Task templates updated:', taskTemplates);
-    console.log('Template tasks mapped:', templateTasks);
-  }, [taskTemplates]);
-  
-  // 加载用户任务
-  const loadUserTasks = async () => {
-    if (!userId) return;
-    
-    setLoadingTasks(true);
-    try {
-      // 直接从 Supabase 获取用户的任务，避免使用 DbContext 中的方法
-      console.log('Fetching ongoing tasks for user ID:', userId);
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'ongoing')  // 只获取状态为ongoing的任务
-        .order('priority', { ascending: false });  // 按priority倒序排列
-        
-      if (error) {
-        console.error('Error fetching tasks from Supabase:', error);
-        throw error;
-      }
+    if (tasks.length > 0) {
+      console.log('[TodayView] Tasks loaded, filtering for userTasks');
+      const filteredTasks = tasks
+        .filter(task => task.status === 'ongoing')
+        .sort((a, b) => {
+          const priorityA = a.priority || 0;
+          const priorityB = b.priority || 0;
+          return priorityB - priorityA;  // 倒序排列
+        });
       
-      console.log('Fetched ongoing tasks from Supabase:', data);
-      setUserTasks(data || []);
-    } catch (error) {
-      console.error('Error loading user tasks:', error);
-      // 如果直接获取失败，回退到使用 DbContext 中的方法
-      try {
-        await loadTasks();
-        // 过滤和排序从DbContext加载的任务
-        const filteredTasks = tasks
-          .filter(task => task.status === 'ongoing')
-          .sort((a, b) => {
-            const priorityA = a.priority || 0;
-            const priorityB = b.priority || 0;
-            return priorityB - priorityA;  // 倒序排列
-          });
-        console.log('Loaded and filtered tasks via DbContext:', filteredTasks);
-        setUserTasks(filteredTasks);
-      } catch (fallbackError) {
-        console.error('Fallback load method also failed:', fallbackError);
-      }
-    } finally {
-      setLoadingTasks(false);
+      setUserTasks(filteredTasks);
+      console.log('[TodayView] UserTasks updated:', filteredTasks.length);
+    } else {
+      setUserTasks([]);
     }
-  };
+  }, [tasks]);
   
-  // 加载任务模板数据
-  const loadTaskTemplates = async () => {
-    if (!userId) return;
-    
-    setLoadingTemplates(true);
-    try {
-      const { data, error } = await supabase
-        .from('task_templates')
-        .select('*')
-        .eq('user_id', userId);
-        
-      if (error) throw error;
-      console.log('Loaded task templates:', data);
-      setTaskTemplates(data || []);
-    } catch (error) {
-      console.error('Error loading task templates:', error);
-    } finally {
-      setLoadingTemplates(false);
-    }
-  };
+  // 当 DbContext 中的 templates 更新时，同步到本地状态
+  useEffect(() => {
+    setTaskTemplates(templates);
+  }, [templates]);
+  
+  // 删除原来的 loadUserTasks 和 loadTaskTemplates 函数，现在通过 DbContext 和 useEffect 自动处理
   
   // 从数据库加载今天的任务安排
   const loadTodayScheduleEntries = async () => {
@@ -824,7 +760,7 @@ const TodayView = () => {
         // 如果是Date对象，提取日期部分
         entryDateStr = entry.date.toISOString().split('T')[0];
       } else {
-        console.warn('无效的日期格式:', entry.date);
+        
         return false;
       }
       
@@ -912,9 +848,7 @@ const TodayView = () => {
         Object.values(entriesByDate).forEach(entries => {
           entriesForDay = entriesForDay.concat(entries);
         });
-        
-        console.log(`${dateStr} 的任务数: ${entriesForDay.length}`);
-        
+
         // 将数据转换为 UI 格式
         const tasksForDay = entriesForDay.map(entry => ({
           id: entry.entry_id.toString(),
@@ -940,7 +874,7 @@ const TodayView = () => {
         }
       });
     } catch (error) {
-      console.error('加载历史数据出错:', error);
+      
     } finally {
       setLoading(false);
     }
@@ -956,7 +890,7 @@ const TodayView = () => {
   // 当数据库中的调度条目更改时更新本地状态
   useEffect(() => {
     if (scheduleEntries.length > 0) {
-      console.log('Converting schedule entries to UI format:', scheduleEntries);
+      
       const mappedTasks = scheduleEntries.map(entry => {
         // 处理数据库格式到UI格式的转换
         // 数据库格式: { entry_id, slot, date, status, task_type, custom_name, ... }
@@ -970,7 +904,7 @@ const TodayView = () => {
           completed: entry.status === 'completed'
         };
       });
-      console.log('Mapped tasks for UI:', mappedTasks);
+      
       setScheduledTasks(mappedTasks);
     }
   }, [scheduleEntries]);
@@ -984,7 +918,7 @@ const TodayView = () => {
           const convertedResults = searchResults.map(convertDbNoteToUINote);
           setFilteredNotes(convertedResults);
         } catch (error) {
-          console.error('重新搜索笔记失败:', error);
+          
           setFilteredNotes([]);
         }
       };
@@ -1022,16 +956,14 @@ const TodayView = () => {
     setNotesLoading(true);
     
     try {
-      console.log(`[笔记加载] 开始加载笔记, page=${page}, reset=${reset}, 每页20条`);
       
       // 加载数据库中的笔记（数据库已经按正确顺序排序：置顶优先，然后按更新时间倒序）
       await loadNotes();
-      console.log(`[笔记加载] 从数据库加载了 ${notes.length} 条笔记`);
       
       if (notes.length > 0) {
         // 检查第一条笔记的时间格式
         const firstNote = notes[0];
-        console.log('[笔记加载] 第一条笔记时间格式:');
+        
         console.log(`- created_at: ${firstNote.created_at} (${typeof firstNote.created_at})`);
         console.log(`- updated_at: ${firstNote.updated_at} (${typeof firstNote.updated_at})`);
       }
@@ -1065,8 +997,7 @@ const TodayView = () => {
             pinned: typedNote.pinned || false
           };
         });
-        
-        console.log(`[笔记加载] 转换后的笔记数量: ${dbNotes.length}`);
+
         if (dbNotes.length > 0) {
           console.log(`[笔记加载] 第一条转换后的笔记:`, {
             id: dbNotes[0].id,
@@ -1080,7 +1011,6 @@ const TodayView = () => {
         
         // 数据库已经排序好了，直接使用，无需前端重新排序
         setNotesState(dbNotes);
-        console.log('[笔记加载] 状态已更新, 完成重置加载');
         
         // 设置hasMoreNotes
         const hasMore = notes.length > 20;
@@ -1089,10 +1019,9 @@ const TodayView = () => {
         // 加载更多笔记（分页）
         const pageSize = 20;
         const startIndex = (page - 1) * pageSize;
-        console.log(`[笔记加载] 加载更多: 第${page}页, startIndex=${startIndex}, 总数=${notes.length}`);
         
         if (startIndex >= notes.length) {
-          console.log('[笔记加载] 没有更多笔记可加载');
+          
           setHasMoreNotes(false);
           setNotesLoading(false);
           return;
@@ -1133,11 +1062,9 @@ const TodayView = () => {
               pinned: typedNote.pinned || false
             };
           });
-        
-        console.log(`[笔记加载] 新加载笔记数量: ${newNotes.length}`);
-        
+
         if (newNotes.length === 0) {
-          console.log('[笔记加载] 没有新笔记可加载');
+          
           setHasMoreNotes(false);
           setNotesLoading(false);
           return;
@@ -1145,12 +1072,11 @@ const TodayView = () => {
         
         // 直接追加新笔记到现有列表，数据库已经排序好了
         setNotesState(prevNotes => [...prevNotes, ...newNotes]);
-        
-        console.log('[笔记加载] 状态已更新, 完成加载更多');
+
         setHasMoreNotes(notes.length > startIndex + pageSize);
       }
     } catch (error) {
-      console.error('[笔记加载] 加载失败:', error);
+      
     } finally {
       setNotesLoading(false);
     }
@@ -1158,18 +1084,17 @@ const TodayView = () => {
   
   // 监听notesState变化
   useEffect(() => {
-    console.log('Exception: notesState已更新, 当前笔记数量:', notesState.length);
+    
     console.log('Exception: 当前笔记内容:', JSON.stringify(notesState));
   }, [notesState]);
 
   // 监听activeTab变化
   useEffect(() => {
-    console.log('Exception: activeTab已变更为:', activeTab);
     
     // 使用try-catch包裹标签切换逻辑，防止异常传播
     try {
       if (activeTab === 'notes') {
-        console.log('Exception: 切换到笔记标签，当前笔记数量:', notesState.length);
+        
         // 每次切换到笔记标签页时，重新加载笔记
         setNotesPage(1); // 重置页码
         setHasMoreNotes(true); // 重置加载更多状态
@@ -1181,7 +1106,7 @@ const TodayView = () => {
         }
       }
     } catch (error) {
-      console.error('标签页切换处理异常:', error);
+      
     }
   }, [activeTab]);
   
@@ -1205,7 +1130,7 @@ const TodayView = () => {
         
         // 当距离底部200px以内时加载更多（增加触发距离，提前加载）
         if (distanceToBottom < 200 && !notesLoading && hasMoreNotes && !isSearching) {
-          console.log('[自动加载] 滚动接近底部，自动加载更多笔记');
+          
           const nextPage = notesPage + 1;
           setNotesPage(nextPage);
           loadNotesData(nextPage, false);
@@ -1226,7 +1151,7 @@ const TodayView = () => {
   // 点击加载更多笔记
   const handleLoadMoreClick = () => {
     if (!notesLoading && hasMoreNotes && !isSearching) {
-      console.log('[手动加载] 点击加载更多按钮，加载20条笔记');
+      
       const nextPage = notesPage + 1;
       setNotesPage(nextPage);
       loadNotesData(nextPage, false);
@@ -1238,12 +1163,10 @@ const TodayView = () => {
     if (!newNote.trim()) return;
     
     try {
-      console.log('[笔记创建] 开始创建新笔记');
       
       // 获取当前时间
       const now = new Date();
       const formattedNow = formatDateTime(now);
-      console.log(`[笔记创建] 当前时间: ${formattedNow}`);
       
       // 创建临时ID和临时笔记对象用于立即显示
       const tempId = `temp-${Date.now()}`;
@@ -1254,9 +1177,7 @@ const TodayView = () => {
         updatedAt: formattedNow,
         pinned: false  // 新创建的笔记默认不置顶
       };
-      
-      console.log('[笔记创建] 添加临时笔记到UI:', optimisticNote);
-      
+
       // 立即更新UI状态，将新笔记添加到正确位置（非置顶笔记的最前面）
       setNotesState(prevNotes => {
         // 分离置顶和非置顶笔记
@@ -1271,14 +1192,11 @@ const TodayView = () => {
       setNewNote('');
       
       // 然后发送到服务器，跳过自动刷新以保持乐观更新
-      console.log('[笔记创建] 发送数据到服务器');
+      
       const result = await createNote(optimisticNote.content, true);
       
       if (result) {
-        console.log('[笔记创建] 服务器成功返回:', result);
-        console.log(`[笔记创建] 服务器返回的created_at: ${result.created_at}`);
-        console.log(`[笔记创建] 服务器返回的updated_at: ${result.updated_at}`);
-        
+
         // 用真实ID替换临时ID，并更新为服务器返回的准确数据
         setNotesState(prevNotes => {
           return prevNotes.map(note => {
@@ -1295,9 +1213,7 @@ const TodayView = () => {
             return note;
           });
         });
-        
-        console.log('[笔记创建] 笔记创建完成，使用乐观更新');
-        
+
         // 强制刷新拖拽上下文（如果页面有拖拽元素）
         setTimeout(() => {
           forceRefreshDragContext();
@@ -1305,12 +1221,12 @@ const TodayView = () => {
         
         // 创建成功，无需重新加载，乐观更新已经处理了排序
       } else {
-        console.error('[笔记创建] 创建失败，服务器返回空结果');
+        
         // 从状态中移除乐观添加的笔记
         setNotesState(prevNotes => prevNotes.filter(note => note.id !== tempId));
       }
     } catch (error) {
-      console.error('[笔记创建] 创建失败:', error);
+      
       // 发生错误时也需要从UI中移除乐观添加的笔记
       setNotesState(prevNotes => prevNotes.filter(note => !note.id.startsWith('temp-')));
     }
@@ -1376,7 +1292,7 @@ const TodayView = () => {
         const convertedResults = searchResults.map(convertDbNoteToUINote);
         setFilteredNotes(convertedResults);
       } catch (error) {
-        console.error('搜索笔记失败:', error);
+        
         setFilteredNotes([]);
       }
     } else {
@@ -1401,7 +1317,6 @@ const TodayView = () => {
     if (!editingNoteId || !editingNoteContent.trim()) return;
     
     try {
-      console.log('[笔记更新] 开始更新笔记:', editingNoteId);
       
       // 获取当前时间用于乐观更新
       const now = new Date();
@@ -1410,13 +1325,11 @@ const TodayView = () => {
       // 获取被更新笔记的置顶状态
       const editingNote = notesState.find(note => note.id === editingNoteId);
       if (!editingNote) {
-        console.error('[笔记更新] 找不到要更新的笔记');
+        
         return;
       }
-      
-      console.log('[笔记更新] 原始笔记:', editingNote);
+
       console.log('[笔记更新] 新内容:', editingNoteContent.trim());
-      console.log('[笔记更新] 新更新时间:', formattedNow);
       
       // 创建更新后的笔记对象
       const updatedNote = {
@@ -1424,21 +1337,15 @@ const TodayView = () => {
         content: editingNoteContent.trim(),
         updatedAt: formattedNow
       };
-      
-      console.log('[笔记更新] 更新后的笔记:', updatedNote);
-      
+
       // 立即更新UI状态（乐观更新）- 智能排序
       setNotesState(prevNotes => {
-        console.log('[笔记更新] 更新前的笔记列表:', prevNotes.length);
-        console.log('[笔记更新] 更新前第一条笔记时间:', prevNotes[0]?.updatedAt);
-        
+
         // 更新笔记内容和时间
         const updatedNotes = prevNotes.map(note => 
           note.id === editingNoteId ? updatedNote : note
         );
-        
-        console.log('[笔记更新] 内容更新后的笔记列表:', updatedNotes.length);
-        
+
         // 智能重新排序：置顶的笔记在前，然后按更新时间排序
         const pinnedNotes = updatedNotes.filter(note => note.pinned);
         const unpinnedNotes = updatedNotes.filter(note => !note.pinned);
@@ -1452,9 +1359,7 @@ const TodayView = () => {
         unpinnedNotes.sort(sortByTime);
         
         const finalNotes = [...pinnedNotes, ...unpinnedNotes];
-        console.log('[笔记更新] 最终排序后的笔记列表:', finalNotes.length);
-        console.log('[笔记更新] 排序后第一条笔记ID:', finalNotes[0]?.id);
-        console.log('[笔记更新] 排序后第一条笔记时间:', finalNotes[0]?.updatedAt);
+
         console.log('[笔记更新] 排序后第一条笔记内容:', finalNotes[0]?.content.substring(0, 20));
         
         return finalNotes;
@@ -1463,17 +1368,15 @@ const TodayView = () => {
       // 立即清除编辑状态，让用户看到更新结果
       setEditingNoteId(null);
       setEditingNoteContent('');
-      
-      console.log('[笔记更新] UI已立即更新并退出编辑模式，发送到服务器');
-      
+
       // 发送更新到数据库，跳过自动刷新以保持乐观更新
       const success = await updateNote(editingNoteId, editingNoteContent.trim(), true);
       
       if (success) {
-        console.log('[笔记更新] 服务器更新成功');
+        
         // 更新成功，无需重新加载，乐观更新已经处理了所有状态
       } else {
-        console.error('[笔记更新] 服务器更新失败，恢复原始状态');
+        
         // 如果服务器更新失败，恢复原始笔记状态
         setNotesState(prevNotes => {
           return prevNotes.map(note => 
@@ -1483,7 +1386,7 @@ const TodayView = () => {
       }
       
     } catch (error) {
-      console.error('[笔记更新] 更新失败:', error);
+      
       // 发生错误时恢复原始状态
       setNotesState(prevNotes => {
         const editingNote = prevNotes.find(note => note.id === editingNoteId);
@@ -1519,26 +1422,23 @@ const TodayView = () => {
     // 保存要删除的笔记，以便在失败时恢复
     const noteToDelete = notesState.find(note => note.id === noteId);
     if (!noteToDelete) {
-      console.error('[笔记删除] 找不到要删除的笔记');
+      
       return;
     }
     
     try {
-      console.log('[笔记删除] 开始删除笔记:', noteId);
       
       // 立即从UI中移除笔记（乐观更新）
       setNotesState(prevNotes => prevNotes.filter(note => note.id !== noteId));
-      
-      console.log('[笔记删除] UI已立即更新，发送到服务器');
-      
+
       // 发送删除请求到数据库，跳过自动刷新以保持乐观更新
       const success = await deleteNote(noteId, true);
       
       if (success) {
-        console.log('[笔记删除] 服务器删除成功');
+        
         // 删除成功，无需重新排序，已从UI中移除
       } else {
-        console.error('[笔记删除] 服务器删除失败，恢复UI状态');
+        
         // 如果服务器删除失败，恢复笔记到UI的正确位置
         setNotesState(prevNotes => {
           // 重新插入已删除的笔记到正确位置
@@ -1558,7 +1458,7 @@ const TodayView = () => {
         });
       }
     } catch (error) {
-      console.error('[笔记删除] 删除失败:', error);
+      
       // 发生错误时恢复原始状态
       setNotesState(prevNotes => {
         // 重新插入已删除的笔记到正确位置
@@ -1582,12 +1482,11 @@ const TodayView = () => {
   // 切换笔记置顶状态
   const toggleNotePinHandler = async (noteId: string, currentPinned: boolean) => {
     try {
-      console.log('[笔记置顶] 开始切换置顶状态:', noteId, '当前状态:', currentPinned);
       
       // 保存要修改的笔记，以便在失败时恢复
       const noteToUpdate = notesState.find(note => note.id === noteId);
       if (!noteToUpdate) {
-        console.error('[笔记置顶] 找不到要修改的笔记');
+        
         return;
       }
       
@@ -1613,17 +1512,15 @@ const TodayView = () => {
         
         return [...pinnedNotes, ...unpinnedNotes];
       });
-      
-      console.log('[笔记置顶] UI已立即更新，发送到服务器');
-      
+
       // 发送置顶状态切换请求到数据库，跳过自动刷新以保持乐观更新
       const success = await toggleNotePin(noteId, newPinnedState, true);
       
       if (success) {
-        console.log('[笔记置顶] 服务器更新成功');
+        
         // 置顶状态更新成功，无需重新加载，乐观更新已经处理了排序
       } else {
-        console.error('[笔记置顶] 服务器更新失败，恢复UI状态');
+        
         // 如果服务器更新失败，恢复笔记状态
         setNotesState(prevNotes => {
           const restoredNotes = prevNotes.map(note => 
@@ -1645,7 +1542,7 @@ const TodayView = () => {
         });
       }
     } catch (error) {
-      console.error('[笔记置顶] 切换失败:', error);
+      
       // 发生错误时恢复原始状态
       setNotesState(prevNotes => {
         const noteToUpdate = prevNotes.find(note => note.id === noteId);
@@ -1785,22 +1682,19 @@ const TodayView = () => {
     
     // 系统时间日志
     const now = new Date(); 
-    console.log('=== 系统时间日志 ===');
+    
     console.log(`系统时间: ${now.toString()}`);
     console.log(`系统ISO时间: ${now.toISOString()}`);
     console.log(`系统日期部分: ${now.toISOString().split('T')[0]}`);
-    console.log('=====================');
     
     // 直接构造日期字符串
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
-    
-    console.log('创建任务使用日期:', dateStr);
-    
+
     // 创建任务数据
-    console.log('即将发送到数据库的任务数据:');
+    
     const createData = {
       title,
       timeSlot: timeSlot,
@@ -1840,7 +1734,7 @@ const TodayView = () => {
         }, 100);
       }
     } catch (error) {
-      console.error('创建任务失败:', error);
+      
       // 如果创建失败，可以选择恢复输入框内容
       // setNewTaskText({ ...newTaskText, [timeSlot]: title });
     }
@@ -2161,7 +2055,6 @@ const TodayView = () => {
   // 已经不再需要这个函数，笔记内容直接渲染在主布局中
   /*
   const renderNotesTab = () => {
-    console.log('Exception: 渲染笔记标签页, 当前笔记数量:', notesState.length);
     
     return (
       <div 
@@ -2185,48 +2078,36 @@ const TodayView = () => {
   
   // 处理任务拖拽结束
   const handleDragEnd = async (result: any) => {
-    console.log('=============== DRAG END EVENT ===============');
-    console.log('Full drag result:', result);
-    
+
     const { source, destination, draggableId } = result;
     
     // Debug information
-    console.log('Source:', source);
-    console.log('Destination:', destination);
-    console.log('DraggableId:', draggableId);
-    
+
     // 如果没有目的地或者没有移动，则返回
     if (!destination || 
         (source.droppableId === destination.droppableId && 
          source.index === destination.index)) {
-      console.log('No destination or no movement, returning');
+      
       return;
     }
     
     // 从支线任务或模板任务列表拖到时间段
     if ((source.droppableId === 'challenges' || source.droppableId === 'templates') && 
         ['morning', 'afternoon', 'evening'].includes(destination.droppableId)) {
-      
-      console.log('Dragging from challenge/template to time slot');
-      
+
       try {
         // 解析draggableId以获取原始ID
         const idParts = draggableId.split('-');
         const prefix = idParts[0]; // 'challenge' or 'template'
         const originalId = idParts.slice(1).join('-'); // 重新连接，以防ID本身包含破折号
-        
-        console.log(`Parsed draggable ID: prefix=${prefix}, originalId=${originalId}`);
-        
+
         // 获取源列表和任务索引
         const sourceList = source.droppableId === 'challenges' ? challengeTasks : templateTasks;
         const taskIndex = source.index;
-        
-        console.log('Source list:', sourceList);
-        console.log('Task index:', taskIndex);
-        
+
         // 检查索引是否有效
         if (taskIndex >= sourceList.length) {
-          console.error('Task index out of bounds:', taskIndex, 'list length:', sourceList.length);
+          
           return;
         }
         
@@ -2234,18 +2115,16 @@ const TodayView = () => {
         const task = sourceList[taskIndex];
         
         if (!task || !task.id) {
-          console.error('Invalid task:', task);
+          
           return;
         }
         
         // 验证找到的任务ID与解析的ID是否匹配
         if (task.id !== originalId) {
-          console.warn(`Task ID mismatch. Parsed ID: ${originalId}, Task ID: ${task.id}`);
+          
           // 继续使用索引找到的任务，而不是解析的ID
         }
-        
-        console.log('Task to add:', task);
-        
+
         // 获取当前日期
         const now = new Date();
         const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -2275,7 +2154,7 @@ const TodayView = () => {
         if (taskType === 'challenge') {
           const taskId = parseInt(task.id);
           if (isNaN(taskId)) {
-            console.error('Invalid task ID for conversion to number:', task.id);
+            
             return;
           }
           newEntry.task_id = taskId;
@@ -2283,7 +2162,7 @@ const TodayView = () => {
         } else {
           const templateId = parseInt(task.id);
           if (isNaN(templateId)) {
-            console.error('Invalid template ID for conversion to number:', task.id);
+            
             return;
           }
           newEntry.template_id = templateId;
@@ -2297,11 +2176,8 @@ const TodayView = () => {
             newEntry.description = templateInfo.description || '';
           }
         }
-        
-        console.log('Creating schedule entry with data:', newEntry);
-        
+
         const result = await createScheduleEntry(newEntry);
-        console.log('Create result:', result);
         
         if (result) {
           // 创建新任务对象并添加到本地状态
@@ -2329,7 +2205,7 @@ const TodayView = () => {
         // 不再调用 loadTodayScheduleEntries()，避免重新排序
         
       } catch (error) {
-        console.error('Error in drag-and-drop operation:', error);
+        
       }
       return;
     }
@@ -2342,22 +2218,14 @@ const TodayView = () => {
         // 从draggableId中提取任务ID（格式：task-{id}-{slot}）
         const taskIdMatch = draggableId.match(/^task-(\d+)-/);
         if (!taskIdMatch) {
-          console.error('Invalid draggableId format:', draggableId);
+          
           return;
         }
         
         const taskIdToMove = taskIdMatch[1];
         const sourceSlot = source.droppableId as TimeSlot;
         const destSlot = destination.droppableId as TimeSlot;
-        
-        console.log('Moving task:', { 
-          taskIdToMove,
-          sourceSlot, 
-          destSlot,
-          sourceIndex: source.index,
-          destIndex: destination.index
-        });
-        
+
         // 获取当前的临时排序状态的副本
         const newOrder = { ...temporaryTaskOrder };
         
@@ -2373,12 +2241,7 @@ const TodayView = () => {
           
           // 更新排序状态
           newOrder[sourceSlot] = items;
-          
-          console.log('Same slot reordering completed:', {
-            slot: sourceSlot,
-            oldOrder: temporaryTaskOrder[sourceSlot],
-            newOrder: items
-          });
+
         } else {
           // 在不同时间段之间移动
           
@@ -2405,86 +2268,16 @@ const TodayView = () => {
         }, 200);
         
       } catch (error) {
-        console.error('Error moving task:', error);
+        
       }
     }
   };
   
   // 处理拖拽开始
   const handleDragStart = (start: any) => {
-    console.log('%c拖拽开始 - Drag Start', 'background: #ffa500; color: #fff; padding: 2px 5px; border-radius: 3px;', {
-      draggableId: start.draggableId,
-      source: start.source,
-      type: start.type,
-      mode: start.mode
-    });
-  };
-
-  // 添加一个简单的点击测试函数到每个挑战和模板任务
-  const handleTaskClick = (type: string, id: string) => {
-    console.log(`%c点击${type}任务 - Click ${type} task`, 'background: #4caf50; color: #fff; padding: 2px 5px; border-radius: 3px;', {
-      type,
-      id
-    });
-  };
-
-  // 添加测试笔记
-  const addTestNote = () => {
-    // 添加测试笔记
-    const now = new Date();
     
-    const content = '这是一条测试笔记 ' + now.toLocaleTimeString();
-    
-    createNote(content)
-      .then(result => {
-        if (result) {
-          console.log('测试笔记已创建, ID:', result.note_id);
-          // 重新加载笔记列表
-          loadNotesData();
-        }
-      })
-      .catch(error => {
-        console.error('创建测试笔记失败:', error);
-      });
   };
-
-  // 将调试函数暴露到全局，方便在控制台调用
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).debugDragAndDrop = () => {
-        console.log('=== 拖拽功能调试 ===');
-        
-        // 检查拖拽元素
-        const draggables = document.querySelectorAll('[data-rbd-draggable-id]');
-        console.log(`发现 ${draggables.length} 个拖拽元素`);
-        
-        // 检查每个拖拽元素的状态
-        draggables.forEach((el, index) => {
-          if (el instanceof HTMLElement) {
-            console.log(`拖拽元素 ${index + 1}:`, {
-              id: el.getAttribute('data-rbd-draggable-id'),
-              draggable: el.getAttribute('draggable'),
-              cursor: el.style.cursor,
-              enhanced: el.getAttribute('data-drag-enhanced')
-            });
-          }
-        });
-        
-        // 强制刷新拖拽上下文
-        console.log('强制刷新拖拽上下文...');
-        forceRefreshDragContext();
-        
-        // 延迟再次检查
-        setTimeout(() => {
-          const updatedDraggables = document.querySelectorAll('[data-rbd-draggable-id]');
-          console.log(`刷新后发现 ${updatedDraggables.length} 个拖拽元素`);
-          console.log('=== 调试完成 ===');
-        }, 500);
-      };
-      (window as any).forceRefreshDragContext = forceRefreshDragContext;
-    }
-  }, []);
-
+  
   // 开始编辑笔记
   const startEditingNote = (note: Note) => {
     setEditingNoteId(note.id);
@@ -2522,12 +2315,11 @@ const TodayView = () => {
 
     // 检查内容是否有变化，避免不必要的保存
     if (modalNoteContent.trim() === originalModalContent.trim()) {
-      console.log('[笔记自动保存] 内容无变化，跳过保存');
+      
       return true; // 内容无变化也算成功
     }
 
     try {
-      console.log('[笔记自动保存] 检测到内容变化，开始保存:', selectedNote.id);
       
       // 构建更新数据
       const updateData = {
@@ -2543,7 +2335,7 @@ const TodayView = () => {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error auto-saving note:', error);
+        
         return false;
       }
 
@@ -2569,11 +2361,11 @@ const TodayView = () => {
 
       // 更新原始内容，避免重复保存
       setOriginalModalContent(modalNoteContent.trim());
-      console.log('[笔记自动保存] 保存成功');
+      
       return true;
 
     } catch (error) {
-      console.error('Error auto-saving modal note:', error);
+      
       return false;
     }
   };
@@ -2582,7 +2374,7 @@ const TodayView = () => {
   const closeNoteModal = async () => {
     // 先尝试自动保存
     if (selectedNote && modalNoteContent.trim()) {
-      console.log('[弹窗关闭] 尝试自动保存笔记');
+      
       await autoSaveModalNote();
     }
 
@@ -2609,7 +2401,6 @@ const TodayView = () => {
     if (!selectedNote || !modalNoteContent.trim()) return;
 
     try {
-      console.log('[笔记手动保存] 开始更新笔记:', selectedNote.id);
       
       // 构建更新数据
       const updateData = {
@@ -2625,7 +2416,7 @@ const TodayView = () => {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error updating note:', error);
+        
         return;
       }
 
@@ -2656,7 +2447,7 @@ const TodayView = () => {
       closeNoteModal();
 
     } catch (error) {
-      console.error('Error saving modal note:', error);
+      
     }
   };
 
@@ -2672,7 +2463,7 @@ const TodayView = () => {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error deleting note:', error);
+        
         return;
       }
 
@@ -2691,7 +2482,7 @@ const TodayView = () => {
       onNoteModalOpenChange();
 
     } catch (error) {
-      console.error('Error deleting modal note:', error);
+      
     }
   };
 
@@ -2712,7 +2503,7 @@ const TodayView = () => {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error toggling note pin:', error);
+        
         return;
       }
 
@@ -2740,7 +2531,7 @@ const TodayView = () => {
       }
 
     } catch (error) {
-      console.error('Error toggling modal note pin:', error);
+      
     }
   };
 
@@ -2809,8 +2600,6 @@ const TodayView = () => {
     });
   };
 
-
-
   // 处理新建笔记聚焦
   const handleNewNoteFocus = () => {
     setNewNoteFocused(true);
@@ -2831,15 +2620,7 @@ const TodayView = () => {
         const currentHeight = textarea.offsetHeight;
         const contentHeight = currentHeight - totalPadding;
         const currentLines = Math.ceil(contentHeight / lineHeight);
-        
-        console.log('聚焦时的高度信息:', {
-          currentHeight,
-          lineHeight,
-          totalPadding,
-          contentHeight,
-          currentLines
-        });
-        
+
         // 如果当前行数小于5行，则展开到5行，允许无限高度扩展
         if (currentLines < 5) {
           adjustTextareaHeight(textarea, 5, undefined, true);
@@ -2883,7 +2664,6 @@ const TodayView = () => {
 
   // 新增：强制重新渲染拖拽上下文的方法
   const forceRefreshDragContext = () => {
-    console.log('[拖拽修复] 强制刷新拖拽上下文');
     
     // 重置服务器上下文
     resetServerContext();
@@ -2894,7 +2674,6 @@ const TodayView = () => {
     // 延迟重新增强拖拽元素
     setTimeout(() => {
       const draggables = document.querySelectorAll('[data-rbd-draggable-id], [data-rbd-drag-handle-draggable-id]');
-      console.log(`[拖拽修复] 重新增强 ${draggables.length} 个拖拽元素`);
       
       draggables.forEach(el => {
         if (el instanceof HTMLElement) {

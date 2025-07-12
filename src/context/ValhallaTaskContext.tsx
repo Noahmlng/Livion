@@ -290,7 +290,7 @@ export const ValhallaTaskProvider = ({ children }: ValhallaTaskProviderProps) =>
     }));
     
     // 添加控制台日志，以便验证更新是否成功
-    console.log(`Task updated: ${taskId} in category ${categoryId}`, updates);
+    
   };
   
   const value = {

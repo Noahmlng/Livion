@@ -3,7 +3,6 @@ import {
   Card, 
   CardBody
 } from '@heroui/react';
-import { signIn } from '../../utils/auth';
 import { useAuth } from '../../context/AuthContext';
 
 interface LoginProps {
@@ -14,7 +13,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState(['', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { refreshAuthState } = useAuth();
+  const { login, refreshAuthState } = useAuth();
   const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null, null]);
 
   const handleInputChange = (index: number, value: string) => {
@@ -36,7 +35,6 @@ export default function Login({ onLogin }: LoginProps) {
     // Auto submit when all fields are filled, but use the updated newPassword array
     // instead of waiting for the state update to complete
     if (index === 4 && value && newPassword.every(char => char)) {
-      console.log("All fields filled, submitting with:", newPassword);
       handleSubmitWithPassword(newPassword);
     }
   };
@@ -64,8 +62,7 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-      await signIn(formattedPassword);
-      await refreshAuthState();
+      await login(formattedPassword);
       
       if (onLogin) {
         onLogin();
@@ -141,7 +138,6 @@ export default function Login({ onLogin }: LoginProps) {
               `}
               value={password[4]}
               onChange={(e) => {
-                console.log("Last input changed:", e.target.value);
                 handleInputChange(4, e.target.value);
               }}
               onKeyDown={(e) => handleKeyDown(4, e)}
