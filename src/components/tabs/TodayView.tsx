@@ -2745,13 +2745,12 @@ const TodayView = () => {
   };
 
   // 自动调整textarea高度的函数
-  const adjustTextareaHeight = (textarea: HTMLTextAreaElement, targetLines?: number, minLines?: number) => {
+  const adjustTextareaHeight = (textarea: HTMLTextAreaElement, targetLines?: number, minLines?: number, allowInfinite?: boolean) => {
     // 重置高度以获取正确的scrollHeight
     textarea.style.height = 'auto';
     
-    // 获取最小和最大高度限制
+    // 获取最小高度限制
     const defaultMinHeight = parseInt(textarea.style.minHeight) || 40;
-    const maxHeight = parseInt(textarea.style.maxHeight) || 200;
     
     // 计算新高度
     let scrollHeight = textarea.scrollHeight;
@@ -2775,40 +2774,42 @@ const TodayView = () => {
       minHeight = Math.max(minLineHeight, defaultMinHeight);
     }
     
-    const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
-    
-    // 设置新高度
-    textarea.style.height = newHeight + 'px';
-    
-    // 动态调整滚动条显示
-    if (scrollHeight > maxHeight) {
-      textarea.style.overflowY = 'auto';
-      textarea.classList.add('scrollable');
-    } else {
+    // 对于新建笔记框，允许无限高度扩展
+    if (allowInfinite || textarea === newNoteTextareaRef.current) {
+      const newHeight = Math.max(scrollHeight, minHeight);
+      textarea.style.height = newHeight + 'px';
       textarea.style.overflowY = 'hidden';
       textarea.classList.remove('scrollable');
+    } else {
+      // 其他textarea保持原有的最大高度限制
+      const maxHeight = parseInt(textarea.style.maxHeight) || 200;
+      const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+      textarea.style.height = newHeight + 'px';
+      
+      // 动态调整滚动条显示
+      if (scrollHeight > maxHeight) {
+        textarea.style.overflowY = 'auto';
+        textarea.classList.add('scrollable');
+      } else {
+        textarea.style.overflowY = 'hidden';
+        textarea.classList.remove('scrollable');
+      }
     }
   };
 
   // 处理新笔记输入变化
-  const handleNewNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setNewNote(e.target.value);
+  const handleNewNoteChange = (value: string) => {
+    setNewNote(value);
     // 使用 requestAnimationFrame 确保DOM更新后再调整高度
     requestAnimationFrame(() => {
-      // 如果处于聚焦状态，保持至少5行的高度
-      const minLines = newNoteFocused ? 5 : undefined;
-      adjustTextareaHeight(e.target, undefined, minLines);
+      if (newNoteTextareaRef.current) {
+        // 无限高度扩展，没有最大行数限制
+        adjustTextareaHeight(newNoteTextareaRef.current, undefined, newNoteFocused ? 5 : 3);
+      }
     });
   };
 
-  // 处理编辑笔记输入变化
-  const handleEditNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditingNoteContent(e.target.value);
-    // 使用 requestAnimationFrame 确保DOM更新后再调整高度
-    requestAnimationFrame(() => {
-      adjustTextareaHeight(e.target);
-    });
-  };
+
 
   // 处理新建笔记聚焦
   const handleNewNoteFocus = () => {
@@ -2839,9 +2840,9 @@ const TodayView = () => {
           currentLines
         });
         
-        // 如果当前行数小于5行，则展开到5行
+        // 如果当前行数小于5行，则展开到5行，允许无限高度扩展
         if (currentLines < 5) {
-          adjustTextareaHeight(textarea, 5);
+          adjustTextareaHeight(textarea, 5, undefined, true);
         }
       }
     }, 50); // 给一点时间让CSS动画类生效
@@ -2856,8 +2857,8 @@ const TodayView = () => {
       if (newNoteTextareaRef.current) {
         const textarea = newNoteTextareaRef.current;
         
-        // 失焦时不再有最小行数限制，让高度根据内容自适应
-        adjustTextareaHeight(textarea);
+        // 失焦时保持最小3行，允许无限高度扩展
+        adjustTextareaHeight(textarea, undefined, 3, true);
       }
     }, 100); // 稍微延迟一点，让聚焦样式的动画完成
   };
@@ -2865,7 +2866,7 @@ const TodayView = () => {
   // 在组件挂载后调整初始高度
   useEffect(() => {
     if (newNoteTextareaRef.current) {
-      adjustTextareaHeight(newNoteTextareaRef.current);
+      adjustTextareaHeight(newNoteTextareaRef.current, undefined, 3, true);
     }
   }, []);
 
@@ -2874,7 +2875,7 @@ const TodayView = () => {
     if (noteTextareaRef.current && editingNoteId) {
       setTimeout(() => {
         if (noteTextareaRef.current) {
-          adjustTextareaHeight(noteTextareaRef.current);
+          adjustTextareaHeight(noteTextareaRef.current, undefined, undefined, false);
         }
       }, 10);
     }
@@ -3366,13 +3367,12 @@ const TodayView = () => {
                     ref={newNoteTextareaRef}
                     placeholder="> 输入数据记录..."
                     value={newNote}
-                    onValueChange={(value) => setNewNote(value)}
+                    onValueChange={handleNewNoteChange}
                     variant="bordered"
                     minRows={3}
-                    maxRows={8}
                     classNames={{
                       base: "w-full",
-                      input: "text-foreground leading-relaxed font-mono",
+                      input: "text-foreground leading-relaxed font-mono resize-none",
                       inputWrapper: "bg-content2 border-primary/30 data-[focus=true]:border-primary",
                     }}
                     onKeyDown={(e) => {
@@ -3413,146 +3413,67 @@ const TodayView = () => {
               </Card>
             </div>
             
-            {/* 笔记显示区域 - 高对比度版本 */}
+            {/* 笔记显示区域 - 统一网格布局 */}
             <div className="space-y-6">
               {(() => {
                 const displayNotes = getDisplayNotes();
                 const pinnedNotes = displayNotes.filter(note => note.pinned);
                 const regularNotes = displayNotes.filter(note => !note.pinned);
+                // 合并笔记，置顶笔记在前
+                const allNotes = [...pinnedNotes, ...regularNotes];
 
                 return (
                   <>
-                    {/* 置顶笔记 - 全宽显示，高对比度 */}
-                    {pinnedNotes.map((note) => (
-                      <div key={`pinned-${note.id}`} className="relative group">
-                        <Card className="relative bg-warning/20 border-2 border-warning shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-                          <div className="absolute top-0 left-0 w-full h-1 bg-warning"></div>
-                          <CardHeader className="border-b border-warning/30 bg-warning/10">
-                            <div className="flex items-center justify-between w-full">
-                              <div className="flex items-center gap-3">
-                                <div className="relative">
-                                  <div className="w-4 h-4 bg-warning rounded-full"></div>
-                                </div>
-                                <Chip
-                                  color="warning"
-                                  variant="solid"
-                                  size="sm"
-                                  className="font-mono text-xs tracking-wider font-bold"
-                                  startContent={
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M16 12V4a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v8H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-5h2a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-2z"/>
-                                    </svg>
-                                  }
-                                >
-                                  PIN
-                                </Chip>
-                              </div>
-                              <div className="text-xs text-foreground font-mono tracking-wider font-bold">
-                                {formatNoteTime(note.updatedAt)}
-                              </div>
-                            </div>
-                          </CardHeader>
-                          {editingNoteId === note.id ? (
-                            <CardBody className="p-6 bg-content1">
-                              <Textarea
-                                ref={noteTextareaRef}
-                                value={editingNoteContent}
-                                onValueChange={setEditingNoteContent}
-                                variant="bordered"
-                                minRows={4}
-                                maxRows={15}
-                                classNames={{
-                                  base: "w-full",
-                                  input: "text-foreground leading-relaxed font-mono",
-                                  inputWrapper: "bg-content1 border-warning/30",
-                                }}
-                                onKeyDown={handleNoteKeyDown}
-                              />
-                              <div className="flex justify-end mt-4 gap-3">
-                                <Button 
-                                  variant="bordered"
-                                  size="sm"
-                                  className="border-default-300"
-                                  onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }}
-                                >
-                                  取消
-                                </Button>
-                                <Button 
-                                  color="warning"
-                                  size="sm"
-                                  variant="solid"
-                                  className="shadow-lg font-bold"
-                                  onClick={saveEditedNote}
-                                >
-                                  保存数据
-                                </Button>
-                              </div>
-                            </CardBody>
-                          ) : (
-                            <CardBody 
-                              className="p-6 cursor-pointer hover:bg-warning/10 transition-colors bg-content1"
-                              onClick={() => openNoteModal(note)}
-                            >
-                              <div className="whitespace-pre-wrap leading-relaxed text-foreground font-mono text-sm">
-                                {note.content}
-                              </div>
-                              <Divider className="my-4 bg-warning/50" />
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  variant="flat"
-                                  size="sm"
-                                  color="warning"
-                                  onClick={(e) => { e.stopPropagation(); toggleNotePinHandler(note.id, note.pinned || false); }}
-                                  className="min-w-0 px-3 h-6 text-xs font-mono font-bold"
-                                >
-                                  取消置顶
-                                </Button>
-                                <Button 
-                                  variant="flat"
-                                  size="sm"
-                                  color="primary"
-                                  onClick={(e) => { e.stopPropagation(); startEditingNote(note); }}
-                                  className="min-w-0 px-3 h-6 text-xs font-mono font-bold"
-                                >
-                                  编辑
-                                </Button>
-                                <Button 
-                                  variant="flat"
-                                  size="sm"
-                                  color="danger"
-                                  onClick={(e) => { e.stopPropagation(); deleteNoteHandler(note.id); }}
-                                  className="min-w-0 px-3 h-6 text-xs font-mono font-bold"
-                                >
-                                  删除
-                                </Button>
-                              </div>
-                            </CardBody>
-                          )}
-                        </Card>
-                      </div>
-                    ))}
-
-                    {/* 普通笔记 - 网格布局，高对比度 */}
-                    {regularNotes.length > 0 && (
+                    {/* 统一网格布局 - 置顶笔记和普通笔记 */}
+                    {allNotes.length > 0 && (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {regularNotes.map((note, index) => {
+                        {allNotes.map((note, index) => {
+                          const isPinned = note.pinned;
                           return (
-                            <div key={`regular-${note.id}`} className="relative group">
-                              <Card className="relative h-48 bg-content1 border border-default-200 hover:border-primary shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer sticky-note z-10 hover:z-20">
-                                <div className="absolute top-0 left-0 w-full h-1 bg-default-300 group-hover:bg-primary transition-colors duration-300"></div>
+                            <div key={`${isPinned ? 'pinned' : 'regular'}-${note.id}`} className="relative group">
+                              <Card className={`relative h-48 bg-content1 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer sticky-note z-10 hover:z-20 ${
+                                isPinned 
+                                  ? 'border-2 border-warning hover:border-warning/80' 
+                                  : 'border border-default-200 hover:border-primary'
+                              }`}>
+                                <div className={`absolute top-0 left-0 w-full h-1 transition-colors duration-300 ${
+                                  isPinned 
+                                    ? 'bg-warning' 
+                                    : 'bg-default-300 group-hover:bg-primary'
+                                }`}></div>
+                                
+                                {/* 置顶标识 */}
+                                {isPinned && (
+                                  <div className="absolute top-2 right-2 z-10">
+                                    <div className="w-6 h-6 bg-warning rounded-full flex items-center justify-center">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-black" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M16 12V4a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v8H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-5h2a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-2z"/>
+                                      </svg>
+                                    </div>
+                                  </div>
+                                )}
+                                
                                 {editingNoteId === note.id ? (
                                   <CardBody className="p-4 flex flex-col h-full bg-content1">
                                     <Textarea
                                       ref={noteTextareaRef}
                                       value={editingNoteContent}
-                                      onValueChange={setEditingNoteContent}
+                                                                              onValueChange={(value) => {
+                                          setEditingNoteContent(value);
+                                          // 使用 requestAnimationFrame 确保DOM更新后再调整高度
+                                          requestAnimationFrame(() => {
+                                            if (noteTextareaRef.current) {
+                                              adjustTextareaHeight(noteTextareaRef.current, undefined, undefined, false);
+                                            }
+                                          });
+                                        }}
                                       variant="bordered"
                                       minRows={3}
                                       maxRows={6}
                                       classNames={{
                                         base: "flex-1",
                                         input: "text-foreground leading-relaxed text-sm",
-                                        inputWrapper: "bg-content1 border-default-200",
+                                        inputWrapper: isPinned ? "bg-content1 border-warning/30" : "bg-content1 border-default-200",
                                       }}
                                       onKeyDown={handleNoteKeyDown}
                                     />
@@ -3568,7 +3489,7 @@ const TodayView = () => {
                                       </Button>
                                       <Button 
                                         isIconOnly
-                                        color="primary"
+                                        color={isPinned ? "warning" : "primary"}
                                         variant="solid"
                                         size="sm"
                                         className="w-6 h-6 min-w-0"
@@ -3596,7 +3517,7 @@ const TodayView = () => {
                                             isIconOnly
                                             variant="flat"
                                             size="sm"
-                                            className="w-5 h-5 min-w-0 opacity-70 hover:opacity-100"
+                                            className={`w-5 h-5 min-w-0 opacity-70 hover:opacity-100 ${isPinned ? 'text-warning' : ''}`}
                                             onClick={(e) => { e.stopPropagation(); toggleNotePinHandler(note.id, note.pinned || false); }}
                                           >
                                             📌
@@ -3726,7 +3647,7 @@ const TodayView = () => {
                       size="sm"
                       className="font-mono text-xs tracking-wider font-bold"
                     >
-                      置顶
+                      PIN
                     </Chip>
                   )}
                   <div className="text-xs text-white font-mono tracking-wider font-bold">
@@ -3739,7 +3660,15 @@ const TodayView = () => {
                 <Textarea
                   ref={modalTextareaRef}
                   value={modalNoteContent}
-                  onValueChange={setModalNoteContent}
+                  onValueChange={(value) => {
+                    setModalNoteContent(value);
+                    // 使用 requestAnimationFrame 确保DOM更新后再调整高度
+                    requestAnimationFrame(() => {
+                      if (modalTextareaRef.current) {
+                        adjustTextareaHeight(modalTextareaRef.current, undefined, undefined, false);
+                      }
+                    });
+                  }}
                   variant="bordered"
                   minRows={12}
                   maxRows={25}
